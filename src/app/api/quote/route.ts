@@ -27,8 +27,8 @@ export async function POST(request: Request) {
 
     // Env validation
     const missingEnv: string[] = [];
-    if (!process.env.SUPABASE_URL) missingEnv.push('SUPABASE_URL');
-    if (!process.env.SUPABASE_KEY) missingEnv.push('SUPABASE_KEY');
+    if (!process.env.SUPABASE_URL && !process.env.NEXT_PUBLIC_SUPABASE_URL) missingEnv.push('SUPABASE_URL');
+    if (!process.env.SUPABASE_KEY && !process.env.SUPABASE_SERVICE_ROLE_KEY) missingEnv.push('SUPABASE_SERVICE_ROLE_KEY');
     if (!process.env.SUPABASE_BUCKET) missingEnv.push('SUPABASE_BUCKET');
     if (missingEnv.length) {
       return NextResponse.json({ message: `Missing environment variables: ${missingEnv.join(', ')}` }, { status: 500 });
