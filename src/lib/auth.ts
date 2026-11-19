@@ -2,12 +2,15 @@ import { betterAuth } from 'better-auth';
 import { Pool } from 'pg';
 import { admin } from 'better-auth/plugins';
 
-// Database connection string with resilient fallback to Supabase IPv4 Pooler (Session Mode)
+// Database connection string strictly sourced from environment variables
 const pgConnectionString =
   process.env.PG_URI ||
   process.env.POSTGRES_URL ||
-  process.env.DATABASE_URL ||
-  'postgresql://postgres.eugejgacxgxwfiwxzqck:gnWuCJeERIZR3gCG@aws-1-ap-south-1.pooler.supabase.com:5432/postgres';
+  process.env.DATABASE_URL;
+
+if (!pgConnectionString && process.env.NODE_ENV === 'production') {
+  console.warn('⚠️ WARNING: PG_URI environment variable is not defined. PostgreSQL database operations will fail.');
+}
 
 // Configure PostgreSQL pool connection for Better Auth
 export const dbPool = new Pool({
@@ -37,10 +40,15 @@ const getAuthBaseUrl = () => {
   return 'http://localhost:3000';
 };
 
+const authSecret = process.env.BETTER_AUTH_SECRET;
+if (!authSecret && process.env.NODE_ENV === 'production') {
+  console.warn('⚠️ WARNING: BETTER_AUTH_SECRET is not defined in production environment variables.');
+}
+
 export const auth = betterAuth({
   database: dbPool,
   baseURL: getAuthBaseUrl(),
-  secret: process.env.BETTER_AUTH_SECRET || '4f71e9b2cc03bf9e83cd641e459be2d3cb0b06afbdf385ce8bf41485455b4194',
+  secret: authSecret || 'fallback-dev-secret-do-not-use-in-production',
   trustedOrigins: [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
