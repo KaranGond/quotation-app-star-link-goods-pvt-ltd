@@ -30,6 +30,20 @@ import {
 import { signIn, signUp, useSession } from '@/lib/auth-client';
 
 export default function LoginPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#f8fafc' }}>
+          <CircularProgress size={32} sx={{ color: '#1e3a5f' }} />
+        </Box>
+      }
+    >
+      <LoginForm />
+    </React.Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get('redirect') || '/';
