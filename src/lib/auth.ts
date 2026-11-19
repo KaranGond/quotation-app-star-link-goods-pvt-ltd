@@ -2,12 +2,12 @@ import { betterAuth } from 'better-auth';
 import { Pool } from 'pg';
 import { admin } from 'better-auth/plugins';
 
-// Database connection string with resilient fallback to Supabase PostgreSQL
+// Database connection string with resilient fallback to Supabase IPv4 Pooler (Session Mode)
 const pgConnectionString =
   process.env.PG_URI ||
   process.env.POSTGRES_URL ||
   process.env.DATABASE_URL ||
-  'postgresql://postgres:gnWuCJeERIZR3gCG@db.eugejgacxgxwfiwxzqck.supabase.co:5432/postgres';
+  'postgresql://postgres.eugejgacxgxwfiwxzqck:gnWuCJeERIZR3gCG@aws-1-ap-south-1.pooler.supabase.com:5432/postgres';
 
 // Configure PostgreSQL pool connection for Better Auth
 export const dbPool = new Pool({
