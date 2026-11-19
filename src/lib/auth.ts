@@ -19,6 +19,11 @@ export const dbPool = new Pool({
 
 // Dynamic Base URL detection for Vercel, Production, and Localhost
 const getAuthBaseUrl = () => {
+  // If running locally in development (npm run dev), always use localhost
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:3000';
+  }
+
   // If explicitly configured with a remote/production URL, use it
   if (process.env.BETTER_AUTH_URL && !process.env.BETTER_AUTH_URL.includes('localhost')) {
     return process.env.BETTER_AUTH_URL;
@@ -37,7 +42,7 @@ const getAuthBaseUrl = () => {
   if (process.env.NODE_ENV === 'production') {
     return 'https://quotation-app-star-link-goods-pvt-l.vercel.app';
   }
-  return process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  return 'http://localhost:3000';
 };
 
 export const auth = betterAuth({
