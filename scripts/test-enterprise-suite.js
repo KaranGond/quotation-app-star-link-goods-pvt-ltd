@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-unused-vars */
 /**
  * ====================================================================
- * ARPIT SOLAR SHOP - ENTERPRISE AUTOMATED VERIFICATION SUITE
+ * STAR LINK GOODS PVT. LTD. - ENTERPRISE AUTOMATED VERIFICATION SUITE
  * Single-Tenant Production & Logic Audit
  * ====================================================================
  */
@@ -43,7 +43,7 @@ async function asyncTest(description, fn) {
 }
 
 console.log('====================================================');
-console.log('  RUNNING ARPIT SOLAR SHOP ENTERPRISE TEST SUITE');
+console.log('  RUNNING STAR LINK GOODS ENTERPRISE TEST SUITE');
 console.log('====================================================\n');
 
 // --------------------------------------------------------------------
@@ -219,33 +219,33 @@ function generateQuoteNumber(customerName) {
     .join('') || 'CUST';
   const year = new Date().getFullYear();
   const day = String(new Date().getDate()).padStart(2, '0');
-  return `ASS/${year}/${safeInitials}/${day}`;
+  return `SLG/${year}/${safeInitials}/${day}`;
 }
 
 test('Generate Quote Number with single word customer name', () => {
   const num = generateQuoteNumber('Vikram');
-  assert.match(num, /^ASS\/\d{4}\/V\/\d{2}$/);
+  assert.match(num, /^SLG\/\d{4}\/V\/\d{2}$/);
 });
 
 test('Generate Quote Number with multi-word name with extra spacing', () => {
-  const num = generateQuoteNumber('  Arpit   Kumar   Mishra  ');
-  assert.match(num, /^ASS\/\d{4}\/AKM\/\d{2}$/);
+  const num = generateQuoteNumber('  Anil   Kumar   Mishra  ');
+  assert.match(num, /^SLG\/\d{4}\/AKM\/\d{2}$/);
 });
 
 test('Generate Quote Number with empty or whitespace customer name falls back to CUST', () => {
   const num = generateQuoteNumber('   ');
-  assert.match(num, /^ASS\/\d{4}\/CUST\/\d{2}$/);
+  assert.match(num, /^SLG\/\d{4}\/CUST\/\d{2}$/);
 });
 
-test('Generate Service Proposal Number defaults to ASS prefix', () => {
-  const genRef = (prefix = 'ASS') => {
+test('Generate Service Proposal Number defaults to SLG prefix', () => {
+  const genRef = (prefix = 'SLG') => {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     return `${prefix}/OM/${year}-${month}`;
   };
   const ref = genRef();
-  assert.match(ref, /^ASS\/OM\/\d{4}-\d{2}$/);
+  assert.match(ref, /^SLG\/OM\/\d{4}-\d{2}$/);
 });
 
 // --------------------------------------------------------------------
@@ -317,7 +317,7 @@ test('formatWhatsAppPhoneNumber rejects invalid short number', () => {
 
 function buildWhatsAppMessage({ customerName, quoteNumber, totalAmount, pdfUrl, vendorName }) {
   const lines = [
-    `🌞 *${(vendorName || 'Arpit Solar Shop').toUpperCase()}*`,
+    `🌞 *${(vendorName || 'Star Link Goods Pvt. Ltd.').toUpperCase()}*`,
     `📄 Quotation Ref: *${quoteNumber}*`,
     `👤 Customer: *${customerName}*`,
     `💰 Total: *₹${new Intl.NumberFormat('en-IN').format(totalAmount)}*`,
@@ -331,13 +331,13 @@ function buildWhatsAppMessage({ customerName, quoteNumber, totalAmount, pdfUrl, 
 test('WhatsApp message contains all essential quotation identifiers', () => {
   const msg = buildWhatsAppMessage({
     customerName: 'Anil Kumar',
-    quoteNumber: 'ASS/2026/AK/18',
+    quoteNumber: 'SLG/2026/AK/18',
     totalAmount: 180000,
     pdfUrl: 'https://supabase.co/storage/quotes/sample.pdf',
-    vendorName: 'Arpit Solar Shop',
+    vendorName: 'Star Link Goods Pvt. Ltd.',
   });
-  assert(msg.includes('ARPIT SOLAR SHOP'));
-  assert(msg.includes('ASS/2026/AK/18'));
+  assert(msg.includes('STAR LINK GOODS PVT. LTD.'));
+  assert(msg.includes('SLG/2026/AK/18'));
   assert(msg.includes('Anil Kumar'));
   assert(msg.includes('1,80,000'));
   assert(msg.includes('https://supabase.co/storage/quotes/sample.pdf'));
@@ -348,13 +348,13 @@ test('WhatsApp message contains all essential quotation identifiers', () => {
 // --------------------------------------------------------------------
 console.log('\n📦 Section 6: Single-Tenant Brand & Security Verification');
 
-test('Verified Single-Tenant Brand Name is Arpit Solar Shop', () => {
-  const activeFirm = 'Arpit Solar Shop';
+test('Verified Single-Tenant Brand Name is Star Link Goods Pvt. Ltd.', () => {
+  const activeFirm = 'Star Link Goods Pvt. Ltd.';
   const gstin = '09APKPM6299L1ZW';
-  const prefix = 'ASS';
-  assert.strictEqual(activeFirm, 'Arpit Solar Shop');
+  const prefix = 'SLG';
+  assert.strictEqual(activeFirm, 'Star Link Goods Pvt. Ltd.');
   assert.strictEqual(gstin, '09APKPM6299L1ZW');
-  assert.strictEqual(prefix, 'ASS');
+  assert.strictEqual(prefix, 'SLG');
 });
 
 test('Unified Stamp & Signature model: single official seal asset', () => {
@@ -646,7 +646,7 @@ function testDefineAbility(user) {
 }
 
 test('CASL: Admin role has full management access over all resources', () => {
-  const adminAbility = testDefineAbility({ email: 'admin@arpitsolar.com', role: 'admin' });
+  const adminAbility = testDefineAbility({ email: 'admin@starlinkgoods.com', role: 'admin' });
   assert(adminAbility.can('manage', 'all'));
   assert(adminAbility.can('delete', 'Quotation'));
   assert(adminAbility.can('update', 'CompanySettings'));
@@ -655,7 +655,7 @@ test('CASL: Admin role has full management access over all resources', () => {
 });
 
 test('CASL: Sales role can create, read, and update Quotations', () => {
-  const salesAbility = testDefineAbility({ email: 'sales@arpitsolar.com', role: 'sales' });
+  const salesAbility = testDefineAbility({ email: 'sales@starlinkgoods.com', role: 'sales' });
   assert(salesAbility.can('create', 'Quotation'));
   assert(salesAbility.can('read', 'Quotation'));
   assert(salesAbility.can('update', 'Quotation'));
@@ -664,7 +664,7 @@ test('CASL: Sales role can create, read, and update Quotations', () => {
 });
 
 test('CASL: Sales role cannot delete any resources or manage CompanySettings', () => {
-  const salesAbility = testDefineAbility({ email: 'sales@arpitsolar.com', role: 'sales' });
+  const salesAbility = testDefineAbility({ email: 'sales@starlinkgoods.com', role: 'sales' });
   assert(!salesAbility.can('delete', 'Quotation'));
   assert(!salesAbility.can('delete', 'Product'));
   assert(!salesAbility.can('manage', 'CompanySettings'));

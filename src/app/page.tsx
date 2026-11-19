@@ -163,7 +163,7 @@ function QuotationBuilder() {
           const d = json.data;
           setCustomCompany({
             id: 'default',
-            name: d.name || 'Arpit Solar Shop',
+            name: d.name || 'Star Link Goods Pvt. Ltd.',
             tagline: d.tagline || '',
             gstin: d.gstin || '',
             cin: d.cin || '',

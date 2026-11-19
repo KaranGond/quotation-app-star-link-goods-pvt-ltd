@@ -1,12 +1,20 @@
 import { NextResponse } from 'next/server';
 import { getServerSupabase } from '@/lib/supabase';
+import { auth } from '@/lib/auth';
 import { gstConfig, calculateSavings } from '@/lib/companyDetails';
+
+export const runtime = 'nodejs';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-// GET - Get single quotation
+// GET - Get single quotation with ownership check
 export async function GET(request: Request, context: RouteContext) {
     try {
+        const session = await auth.api.getSession({ headers: request.headers });
+        if (!session?.user) {
+            return NextResponse.json({ success: false, message: 'Authentication required' }, { status: 401 });
+        }
+
         const { id } = await context.params;
         const supabase = getServerSupabase();
 
@@ -17,6 +25,19 @@ export async function GET(request: Request, context: RouteContext) {
             .single();
 
         if (error) throw error;
+        if (!data) {
+            return NextResponse.json({ success: false, message: 'Quotation not found' }, { status: 404 });
+        }
+
+        // Ownership enforcement: Admin can view any quote; others can only view their own
+        const isAdmin = session.user.role === 'admin' || session.user.email === 'karangond221998@gmail.com';
+        const isOwner = data.user_id === session.user.id || data.user_email === session.user.email;
+        if (!isAdmin && !isOwner) {
+            return NextResponse.json(
+                { success: false, message: 'Access denied: You can only view quotations created by your account' },
+                { status: 403 }
+            );
+        }
 
         return NextResponse.json({ success: true, data });
     } catch (error) {
@@ -24,10 +45,37 @@ export async function GET(request: Request, context: RouteContext) {
     }
 }
 
-// PUT - Update quotation
+// PUT - Update quotation with ownership check
 export async function PUT(request: Request, context: RouteContext) {
     try {
+        const session = await auth.api.getSession({ headers: request.headers });
+        if (!session?.user) {
+            return NextResponse.json({ success: false, message: 'Authentication required' }, { status: 401 });
+        }
+
         const { id } = await context.params;
+        const supabase = getServerSupabase();
+
+        // Check existing record ownership
+        const { data: existing, error: fetchError } = await supabase
+            .from('quotations')
+            .select('user_id, user_email')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !existing) {
+            return NextResponse.json({ success: false, message: 'Quotation not found' }, { status: 404 });
+        }
+
+        const isAdmin = session.user.role === 'admin' || session.user.email === 'karangond221998@gmail.com';
+        const isOwner = existing.user_id === session.user.id || existing.user_email === session.user.email;
+        if (!isAdmin && !isOwner) {
+            return NextResponse.json(
+                { success: false, message: 'Access denied: You can only edit quotations created by your account' },
+                { status: 403 }
+            );
+        }
+
         const body = await request.json();
         const {
             customer_name,
@@ -47,7 +95,7 @@ export async function PUT(request: Request, context: RouteContext) {
             salesperson,
             status,
             pdf_url,
-            form_data, // NEW: full form state for round-trip editing
+            form_data,
         } = body;
 
         // Recalculate GST and totals
@@ -64,9 +112,7 @@ export async function PUT(request: Request, context: RouteContext) {
             state_subsidy
         );
 
-        const supabase = getServerSupabase();
-
-        // Build update object — only include fields that are provided
+        // Build update object
         const updateData: any = {
             customer_name,
             customer_phone,
@@ -85,16 +131,14 @@ export async function PUT(request: Request, context: RouteContext) {
             terms,
             components,
             savings_data: savings,
-            salesperson,
+            salesperson: salesperson || session.user.name || session.user.email,
             status,
         };
 
-        // Only update pdf_url if provided
         if (pdf_url !== undefined) {
             updateData.pdf_url = pdf_url;
         }
 
-        // Store form_data if provided
         if (form_data !== undefined) {
             updateData.form_data = form_data;
         }
@@ -114,11 +158,36 @@ export async function PUT(request: Request, context: RouteContext) {
     }
 }
 
-// DELETE - Delete quotation
+// DELETE - Delete quotation with ownership check
 export async function DELETE(request: Request, context: RouteContext) {
     try {
+        const session = await auth.api.getSession({ headers: request.headers });
+        if (!session?.user) {
+            return NextResponse.json({ success: false, message: 'Authentication required' }, { status: 401 });
+        }
+
         const { id } = await context.params;
         const supabase = getServerSupabase();
+
+        // Check existing record ownership
+        const { data: existing, error: fetchError } = await supabase
+            .from('quotations')
+            .select('user_id, user_email')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !existing) {
+            return NextResponse.json({ success: false, message: 'Quotation not found' }, { status: 404 });
+        }
+
+        const isAdmin = session.user.role === 'admin' || session.user.email === 'karangond221998@gmail.com';
+        const isOwner = existing.user_id === session.user.id || existing.user_email === session.user.email;
+        if (!isAdmin && !isOwner) {
+            return NextResponse.json(
+                { success: false, message: 'Access denied: You can only delete quotations created by your account' },
+                { status: 403 }
+            );
+        }
 
         const { error } = await supabase
             .from('quotations')

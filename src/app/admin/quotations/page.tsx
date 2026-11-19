@@ -39,10 +39,13 @@ type Quotation = {
     form_data?: any;
     components?: any;
     system_type_name?: string;
+    user_email?: string;
+    salesperson?: string;
 };
 
 export default function QuotationsAdminPage() {
     const [quotations, setQuotations] = useState<Quotation[]>([]);
+    const [isAdmin, setIsAdmin] = useState(false);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [startDate, setStartDate] = useState("");
@@ -56,6 +59,7 @@ export default function QuotationsAdminPage() {
             const data = await res.json();
             if (data.success) {
                 setQuotations(data.data || []);
+                setIsAdmin(!!data.isAdmin);
             }
         } catch (error) {
             console.error("Failed to fetch quotations:", error);
@@ -232,6 +236,12 @@ export default function QuotationsAdminPage() {
                         <Typography variant="h4" fontWeight="bold">
                             Quotations
                         </Typography>
+                        <Chip
+                            label={isAdmin ? "Admin: All Users" : "My Quotations Only"}
+                            size="small"
+                            color={isAdmin ? "primary" : "default"}
+                            sx={{ fontWeight: "bold", fontSize: "0.75rem" }}
+                        />
                     </Box>
                     <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
                         <Link href="/?tab=ApolloB2B" style={{ textDecoration: "none" }}>
@@ -367,6 +377,7 @@ export default function QuotationsAdminPage() {
                                             <TableCell sx={{ fontWeight: "bold" }}>Phone</TableCell>
                                             <TableCell sx={{ fontWeight: "bold" }}>System / Capacity</TableCell>
                                             <TableCell sx={{ fontWeight: "bold" }}>Amount</TableCell>
+                                            {isAdmin && <TableCell sx={{ fontWeight: "bold" }}>Created By</TableCell>}
                                             <TableCell sx={{ fontWeight: "bold" }}>Status</TableCell>
                                             <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
                                             <TableCell sx={{ fontWeight: "bold" }} align="center">
@@ -405,6 +416,13 @@ export default function QuotationsAdminPage() {
                                                     )}
                                                 </TableCell>
                                                 <TableCell>{formatCurrency(quotation.total_amount)}</TableCell>
+                                                {isAdmin && (
+                                                    <TableCell>
+                                                        <Typography variant="body2" sx={{ fontSize: "12px", color: "#334155", fontWeight: 500 }}>
+                                                            {quotation.user_email || quotation.salesperson || "Admin"}
+                                                        </Typography>
+                                                    </TableCell>
+                                                )}
                                                 <TableCell>
                                                     <Chip label={quotation.status} size="small" color={getStatusColor(quotation.status) as any} />
                                                 </TableCell>

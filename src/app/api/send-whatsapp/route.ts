@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
             stateSubsidy = 0
         } = quotationData || {};
 
-        const message = `🌞 *ARPIT SOLAR SHOP*
+        const message = `🌞 *STAR LINK GOODS PVT. LTD.*
 ━━━━━━━━━━━━━━━━━
 *Solar Quotation*
 

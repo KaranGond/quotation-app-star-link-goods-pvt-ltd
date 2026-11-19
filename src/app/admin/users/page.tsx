@@ -334,7 +334,7 @@ export default function UsersManagementPage() {
               <TableBody>
                 {users.map((u) => {
                   const isCurrentAuthUser = session?.user?.email === u.email;
-                  const isRootAdmin = u.email === 'karangond221998@gmail.com' || u.email === 'admin@arpitsolar.com';
+                  const isRootAdmin = u.email === 'karangond221998@gmail.com';
 
                   return (
                     <TableRow key={u.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
@@ -444,7 +444,7 @@ export default function UsersManagementPage() {
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 required
-                placeholder="e.g. rahul@arpitsolar.com"
+                placeholder="e.g. sales@starlinkgoods.com"
               />
               <TextField
                 label="Initial Password"

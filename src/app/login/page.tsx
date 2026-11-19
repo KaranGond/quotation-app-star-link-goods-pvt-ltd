@@ -130,7 +130,7 @@ function LoginForm() {
             <SolarPower sx={{ fontSize: 36, color: '#f59e0b' }} />
           </Box>
           <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: -0.5 }}>
-            Arpit Solar Shop
+            Star Link Goods Pvt. Ltd.
           </Typography>
           <Typography variant="caption" sx={{ color: '#94a3b8', letterSpacing: 0.8, textTransform: 'uppercase', fontSize: '10.5px' }}>
             Enterprise Quotation & Solar CRM Platform

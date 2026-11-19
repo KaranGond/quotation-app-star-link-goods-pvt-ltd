@@ -18,7 +18,7 @@ import type { ServiceItem } from "@/lib/companyDetails";
 import { buildQuoteWhatsAppMessage, openWhatsAppDirect } from "@/lib/whatsappShare";
 
 export default function ServiceProposalBuilder() {
-  const selectedCompanyId = "arpit";
+  const selectedCompanyId = "starlink";
   const [customCompany, setCustomCompany] = useState<any>(null);
 
   useEffect(() => {

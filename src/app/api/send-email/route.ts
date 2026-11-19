@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
             const emailBody = `Dear ${customerName || "Customer"},
 
-Thank you for your interest in solar power! Here's your quotation from Arpit Solar Shop.
+Thank you for your interest in solar power! Here's your quotation from Star Link Goods Pvt. Ltd.
 
 SYSTEM DETAILS
 - System Size: ${systemSize} KW
@@ -40,10 +40,10 @@ PM SURYA GHAR SUBSIDY
 EFFECTIVE COST: ₹${new Intl.NumberFormat("en-IN").format(effectiveCost || 0)}
 
 ---
-ARPIT SOLAR SHOP
+STAR LINK GOODS PVT. LTD.
 GSTIN: 09APKPM6299L1ZW
 Contact: +91 9005770466
-Email: arpitsolarshop@gmail.com
+Email: contact@starlinkgoods.com
 
 This quotation is valid for 7 days.`;
 
@@ -87,7 +87,7 @@ This quotation is valid for 7 days.`;
 </head>
 <body>
   <div class="header">
-    <h1>ARPIT SOLAR SHOP</h1>
+    <h1>STAR LINK GOODS PVT. LTD.</h1>
     <p>Solar Quotation</p>
   </div>
   <div class="content">
@@ -114,14 +114,14 @@ This quotation is valid for 7 days.`;
     <p>This quotation is valid for 7 days.</p>
   </div>
   <div class="footer">
-    <p>ARPIT SOLAR SHOP | GSTIN: 09APKPM6299L1ZW</p>
-    <p>Contact: +91 9005770466 | Email: arpitsolarshop@gmail.com</p>
+    <p>STAR LINK GOODS PVT. LTD. | GSTIN: 09APKPM6299L1ZW</p>
+    <p>Contact: +91 9005770466 | Email: contact@starlinkgoods.com</p>
   </div>
 </body>
 </html>`;
 
         await transporter.sendMail({
-            from: `"Arpit Solar Shop" <${smtpUser}>`,
+            from: `"Star Link Goods Pvt. Ltd." <${smtpUser}>`,
             to: email,
             subject: subject || `Solar Quotation - ${customerName || "Customer"}`,
             html: htmlContent

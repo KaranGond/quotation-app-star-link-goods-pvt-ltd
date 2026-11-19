@@ -1,10 +1,10 @@
-// Arpit Solar Shop - Company Details
+// Star Link Goods Pvt. Ltd. - Company Details
 export const companies = [
     {
-        id: "arpit",
-        name: "Arpit Solar Shop",
-        tagline: "ILLUMINATING YOUR FUTURE WITH CLEAN ENERGY",
-        quotePrefix: "ASS",
+        id: "starlink",
+        name: "Star Link Goods Pvt. Ltd.",
+        tagline: "CLEAN ENERGY & SOLAR SOLUTIONS",
+        quotePrefix: "SLG",
         gstin: "09APKPM6299L1ZW",
         // Addresses
         headOffice: "Sh16/114/25-K-2, Sharvodaya Nagar, Kadipur Shivpur, Varanasi 221003",
@@ -12,12 +12,12 @@ export const companies = [
         // Contact
         phone: "+91 9005770466",
         alternatePhone: "9044555572",
-        email: "arpitsolarshop@gmail.com",
+        email: "contact@starlinkgoods.com",
         // Bank Details
         bank: {
             name: "HDFC Bank",
             branch: "Shivpur, Varanasi",
-            accountName: "ARPIT SOLAR SHOP",
+            accountName: "STAR LINK GOODS PVT. LTD.",
             accountNumber: "50200123854806",
             ifsc: "HDFC0004807",
             upiId: "vyapar.173575988777@hdfcbank",
@@ -28,7 +28,7 @@ export const companies = [
         stamp: "https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-signature.png",
         paymentQr: "https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-payment-qr.png",
         // Authorized Signatory
-        authorizedSignatory: "Ratnesh Mishra",
+        authorizedSignatory: "Authorized Signatory",
     }
 ];
 
@@ -79,7 +79,7 @@ export function resolveImageUrl(url: string | null | undefined, origin?: string)
 }
 
 // Quote Number Prefix
-export const quoteNumberPrefix = "ASS"; // Arpit Solar Shop
+export const quoteNumberPrefix = "SLG"; // Star Link Goods
 
 // Generate Quote Number
 export const generateQuoteNumber = (customerInitials: string): string => {
@@ -226,7 +226,7 @@ export const defaultServiceTerms: string[] = [
 ];
 
 // Generate Service Proposal Reference Number
-export const generateServiceRefNumber = (prefix: string = 'ASS'): string => {
+export const generateServiceRefNumber = (prefix: string = 'SLG'): string => {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');

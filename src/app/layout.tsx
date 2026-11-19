@@ -7,7 +7,7 @@ import "../styles/globals.css";
 import { AuthAbilityProvider } from '@/components/Can';
 
 export const metadata: Metadata = {
-  title: "Solar Quotation System | Arpit Solar Shop",
+  title: "Solar Quotation System | Star Link Goods Pvt. Ltd.",
   description: "Executive Solar & Structure Quotation Builder with Commercial Billing and Subsidy Estimations",
 };
 

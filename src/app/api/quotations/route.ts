@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server';
 import { getServerSupabase } from '@/lib/supabase';
+import { auth } from '@/lib/auth';
 import { generateQuoteNumber, gstConfig, calculateSavings, getSubsidyForCapacity } from '@/lib/companyDetails';
 
-// GET - List all quotations
+export const runtime = 'nodejs';
+
+// GET - List quotations with role-based tenancy:
+// - Admin sees ALL quotations across all users.
+// - Sales/Regular users see ONLY their own created quotations.
 export async function GET(request: Request) {
     try {
+        const session = await auth.api.getSession({ headers: request.headers });
+        if (!session?.user) {
+            return NextResponse.json({ success: false, message: 'Authentication required' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const status = searchParams.get('status');
         const limit = parseInt(searchParams.get('limit') || '50', 10);
@@ -20,19 +30,30 @@ export async function GET(request: Request) {
             query = query.eq('status', status);
         }
 
-        const { data, error } = await query;
+        // Role-Based Isolation:
+        const isAdmin = session.user.role === 'admin' || session.user.email === 'karangond221998@gmail.com';
+        if (!isAdmin) {
+            // Non-admin users ONLY see quotations created by their own user_id or user_email
+            query = query.or(`user_id.eq.${session.user.id},user_email.eq.${session.user.email}`);
+        }
 
+        const { data, error } = await query;
         if (error) throw error;
 
-        return NextResponse.json({ success: true, data });
+        return NextResponse.json({ success: true, data, isAdmin });
     } catch (error) {
         return NextResponse.json({ success: false, message: (error as any).message, data: [] }, { status: 500 });
     }
 }
 
-// POST - Create new quotation
+// POST - Create new quotation (tagged with the logged-in user)
 export async function POST(request: Request) {
     try {
+        const session = await auth.api.getSession({ headers: request.headers });
+        if (!session?.user) {
+            return NextResponse.json({ success: false, message: 'Authentication required' }, { status: 401 });
+        }
+
         const body = await request.json();
         const {
             customer_name,
@@ -53,7 +74,7 @@ export async function POST(request: Request) {
             salesperson,
             pdf_url,
             status,
-            form_data, // NEW: full form state for round-trip editing
+            form_data,
         } = body;
 
         if (!customer_name) {
@@ -118,13 +139,16 @@ export async function POST(request: Request) {
                 terms: terms || null,
                 components: components || null,
                 savings_data: savings,
-                salesperson: salesperson || null,
+                salesperson: salesperson || session.user.name || session.user.email,
+                user_id: session.user.id,
+                user_email: session.user.email,
                 status: status || 'draft',
                 pdf_url: pdf_url || null,
-                form_data: form_data || null, // NEW: store full form state
+                form_data: form_data || null,
             }])
             .select()
             .single();
+
         if (error) throw error;
 
         return NextResponse.json({ success: true, data });

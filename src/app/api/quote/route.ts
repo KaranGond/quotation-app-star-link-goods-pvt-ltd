@@ -107,7 +107,7 @@ export async function POST(request: Request) {
       resolveImageAsBase64(rawQr),
     ]);
 
-    const upiLink = `upi://pay?pa=${company?.bank?.upiId || company?.upi_id || 'vyapar.173575988777@hdfcbank'}&pn=${encodeURIComponent(company?.name || 'Arpit Solar Shop')}&am=${grandTotal}&cu=INR`;
+    const upiLink = `upi://pay?pa=${company?.bank?.upiId || company?.upi_id || 'vyapar.173575988777@hdfcbank'}&pn=${encodeURIComponent(company?.name || 'Star Link Goods Pvt. Ltd.')}&am=${grandTotal}&cu=INR`;
 
     const htmlContent = generateQuoteHtml({
       ...quoteData,

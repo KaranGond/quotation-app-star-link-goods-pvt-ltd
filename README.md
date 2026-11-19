@@ -1,4 +1,4 @@
-# ☀️ Arpit Solar Shop — Executive Solar Quotation System
+# ☀️ Star Link Goods Pvt. Ltd. — Executive Solar Quotation System
 
 Enterprise-grade, single-tenant, self-hosted solar and structure quotation platform designed for rooftop residential, commercial solar systems, mounting structure sales (B2B), and solar Operation & Maintenance (O&M) service proposals.
 
@@ -6,7 +6,7 @@ Enterprise-grade, single-tenant, self-hosted solar and structure quotation platf
 
 ## 🚀 Key Features
 
-- **Strict Single-Tenant Architecture**: Dedicated to **Arpit Solar Shop** (GSTIN: `09APKPM6299L1ZW`), eliminating multi-tenant switcher overhead while providing full administrative customization via `/admin/company`.
+- **Strict Single-Tenant Architecture**: Dedicated to **Star Link Goods Pvt. Ltd.** (GSTIN: `09APKPM6299L1ZW`), eliminating multi-tenant switcher overhead while providing full administrative customization via `/admin/company`.
 - **Single Official Rubber Stamp Seal with Signature**: Unified official seal and signatory upload box directly synced to Supabase Storage bucket `company-assets`.
 - **Pixel-Perfect 1-Page A4 PDF Engine**: Optimized Puppeteer + Chromium serverless PDF generator producing guaranteed single-page A4 executive quotations with balanced 10mm margins, clean tabular specifications, payment QR code, and official rubber seal.
 - **Dual WhatsApp Sharing**:
@@ -63,7 +63,7 @@ cp .env.example .env
 ### 4. Database Setup
 Run the SQL schema provided in `supabase_schema.sql` in your Supabase SQL Editor:
 - Creates `quotations`, `company_settings`, `components`, `system_types`, `structure_catalog`, `products`, `integrated_products`, and `internal_quotes` tables.
-- Seeds default system types, components, and Arpit Solar Shop initial settings.
+- Seeds default system types, components, and Star Link Goods Pvt. Ltd. initial settings.
 
 ### 5. Running the Application
 ```bash
@@ -109,4 +109,4 @@ This repository adheres to strict production verification standards:
 
 ## 📄 License & Attribution
 
-Designed and maintained for **Arpit Solar Shop** (Varanasi & Ballia, Uttar Pradesh). All rights reserved.
+Designed and maintained for **Star Link Goods Pvt. Ltd.** (Varanasi & Ballia, Uttar Pradesh). All rights reserved.

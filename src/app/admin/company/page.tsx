@@ -507,7 +507,7 @@ export default function CompanySettingsPage() {
                     label="Company Name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Arpit Solar Shop"
+                    placeholder="e.g. Star Link Goods Pvt. Ltd."
                     required
                     size="small"
                   />
@@ -682,7 +682,7 @@ export default function CompanySettingsPage() {
                     label="Account Holder Name"
                     value={accountName}
                     onChange={(e) => setAccountName(e.target.value)}
-                    placeholder="e.g. ARPIT SOLAR SHOP"
+                    placeholder="e.g. STAR LINK GOODS PVT. LTD."
                     size="small"
                   />
                 </Grid>
