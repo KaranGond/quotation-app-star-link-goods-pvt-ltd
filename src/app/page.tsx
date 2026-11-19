@@ -58,6 +58,8 @@ import {
   Logout,
   Shield,
   Group,
+  AccountBalance,
+  QrCode2,
 } from "@mui/icons-material";
 import { useSession, signOut } from "@/lib/auth-client";
 import { Can } from "@/components/Can";
@@ -154,6 +156,7 @@ function QuotationBuilder() {
   // Company Selection (Single Tenant with DB customizer)
   const [selectedCompanyId, setSelectedCompanyId] = useState(companies[0].id);
   const [customCompany, setCustomCompany] = useState<any>(null);
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState<string>('');
 
   useEffect(() => {
     fetch('/api/company')
@@ -161,6 +164,21 @@ function QuotationBuilder() {
       .then(json => {
         if (json.success && json.data) {
           const d = json.data;
+          const bankList = Array.isArray(d.bank_accounts) && d.bank_accounts.length > 0 ? d.bank_accounts : [
+            {
+              id: 'acc_1',
+              label: 'Primary Account (' + (d.bank_name || 'HDFC Bank') + ')',
+              account_name: d.account_name || 'STAR LINK GOODS PVT. LTD.',
+              bank_name: d.bank_name || 'HDFC Bank',
+              bank_branch: d.bank_branch || '',
+              account_number: d.account_number || '',
+              ifsc: d.ifsc || '',
+              upi_id: d.upi_id || '',
+              qr_code_url: d.qr_code_url || '',
+              is_default: true,
+            }
+          ];
+
           setCustomCompany({
             id: 'default',
             name: d.name || 'Star Link Goods Pvt. Ltd.',
@@ -173,6 +191,7 @@ function QuotationBuilder() {
             phone: d.phone || '',
             alternatePhone: d.alternate_phone || '',
             email: d.email || '',
+            bankAccounts: bankList,
             bank: {
               name: d.bank_name || '',
               branch: d.bank_branch || '',
@@ -188,8 +207,8 @@ function QuotationBuilder() {
             signature_url: d.signature_url || companies[0].signature,
             logo_url: d.logo_url || companies[0].logo,
             qr_code_url: d.qr_code_url || (companies[0] as any).paymentQr,
-            authorizedSignatory: d.authorized_signatory || 'Ratnesh Mishra',
-            quotePrefix: d.quote_prefix || 'ASS',
+            authorizedSignatory: d.authorized_signatory || 'Authorized Signatory',
+            quotePrefix: d.quote_prefix || 'SLG',
             default_terms: d.default_terms || null,
           });
 
@@ -208,9 +227,40 @@ function QuotationBuilder() {
   }, [editingQuotationId]);
 
   const activeCompany = useMemo(() => {
-    if (customCompany) return customCompany;
-    return companies.find(c => c.id === selectedCompanyId) || companies[0];
-  }, [customCompany, selectedCompanyId]);
+    const base = customCompany || companies.find(c => c.id === selectedCompanyId) || companies[0];
+    const accounts = Array.isArray(base.bankAccounts) ? base.bankAccounts : (Array.isArray(base.bank_accounts) ? base.bank_accounts : []);
+    
+    let chosenBank = null;
+    if (selectedBankAccountId && accounts.length > 0) {
+      chosenBank = accounts.find((a: any) => a.id === selectedBankAccountId);
+    }
+    if (!chosenBank && accounts.length > 0) {
+      chosenBank = accounts.find((a: any) => a.is_default) || accounts[0];
+    }
+
+    if (chosenBank) {
+      return {
+        ...base,
+        bankAccounts: accounts,
+        bank: {
+          name: chosenBank.bank_name || base.bank?.name || '',
+          branch: chosenBank.bank_branch || base.bank?.branch || '',
+          accountName: chosenBank.account_name || base.bank?.accountName || '',
+          accountNumber: chosenBank.account_number || base.bank?.accountNumber || '',
+          ifsc: chosenBank.ifsc || base.bank?.ifsc || '',
+          upiId: chosenBank.upi_id || base.bank?.upiId || '',
+        },
+        qr_code_url: chosenBank.qr_code_url || base.qr_code_url,
+        selectedBankAccountId: chosenBank.id,
+        selectedBankAccount: chosenBank,
+      };
+    }
+
+    return {
+      ...base,
+      bankAccounts: accounts,
+    };
+  }, [customCompany, selectedCompanyId, selectedBankAccountId]);
 
   // WhatsApp Modal State
   const [whatsAppModal, setWhatsAppModal] = useState<{
@@ -411,6 +461,13 @@ function QuotationBuilder() {
         setCustomerName(q.customer_name || "");
         setCustomerPhone(q.customer_phone || "");
         setCustomerAddress(q.customer_address || "");
+
+        // Restore bank account selection if present
+        if (q.bank_account?.id) {
+          setSelectedBankAccountId(q.bank_account.id);
+        } else if (fd?.selectedBankAccountId) {
+          setSelectedBankAccountId(fd.selectedBankAccountId);
+        }
         if (q.components && Array.isArray(q.components) && q.components.length > 0) {
           setComponents(q.components);
         }
@@ -1037,7 +1094,8 @@ function QuotationBuilder() {
     b2bPaymentTerms,
     b2bDeliveryDays,
     b2bValidDays,
-  }), [selectedCompanyId, selectedSystemType, capacityKw, phase, panelWattage, panelBrand, customPanelBrand, panelType, panelWarranty, panelItems, actualSystemSize, actualSizeEdited, inverterBrand, customInverterBrand, inverterModel, inverterWarranty, showInverterWarranty, showRatePerWatt, batteryWarranty, customBatteryWarranty, priceInput, discount, gstRate, centralSubsidy, stateSubsidy, extraStructureEnabled, extraStructureRate, extraPanelsEnabled, extraPanelCount, extraPanelPrice, extraWireEnabled, extraWireLength, extraWireRate, serviceItems, serviceTerms, serviceGst, serviceProposalTitle, b2bItems, b2bTerms, b2bProposalTitle, b2bStructureMake, b2bClientGstin, b2bDispatchLocation, b2bPaymentTerms, b2bDeliveryDays, b2bValidDays]);
+    selectedBankAccountId,
+  }), [selectedCompanyId, selectedSystemType, capacityKw, phase, panelWattage, panelBrand, customPanelBrand, panelType, panelWarranty, panelItems, actualSystemSize, actualSizeEdited, inverterBrand, customInverterBrand, inverterModel, inverterWarranty, showInverterWarranty, showRatePerWatt, batteryWarranty, customBatteryWarranty, priceInput, discount, gstRate, centralSubsidy, stateSubsidy, extraStructureEnabled, extraStructureRate, extraPanelsEnabled, extraPanelCount, extraPanelPrice, extraWireEnabled, extraWireLength, extraWireRate, serviceItems, serviceTerms, serviceGst, serviceProposalTitle, b2bItems, b2bTerms, b2bProposalTitle, b2bStructureMake, b2bClientGstin, b2bDispatchLocation, b2bPaymentTerms, b2bDeliveryDays, b2bValidDays, selectedBankAccountId]);
 
   const saveToDatabase = async (pdfUrl?: string, status: string = 'draft') => {
     if (!customerName) return;
@@ -1083,6 +1141,7 @@ function QuotationBuilder() {
           salesperson: activeCompany.authorizedSignatory,
           pdf_url: pdfUrl,
           status: status,
+          bank_account: activeCompany.selectedBankAccount || null,
           form_data: getFormDataSnapshot(),
         })
       });
@@ -1172,6 +1231,7 @@ function QuotationBuilder() {
         })),
         terms: b2bTerms,
         companyDetails: activeCompany,
+        bankAccount: activeCompany.selectedBankAccount,
         skipWhatsApp: options?.skipWhatsApp ?? true,
       };
     }
@@ -1215,6 +1275,7 @@ function QuotationBuilder() {
       components,
       terms,
       companyDetails: activeCompany,
+      bankAccount: activeCompany.selectedBankAccount,
       skipWhatsApp: options?.skipWhatsApp ?? true,
     };
   };
@@ -1644,6 +1705,109 @@ function QuotationBuilder() {
               </Box>
             </AccordionDetails>
           </Accordion>
+
+          {/* Payment & Bank Account Selector */}
+          {activeCompany.bankAccounts && activeCompany.bankAccounts.length > 0 && (
+            <Accordion defaultExpanded disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
+              <AccordionSummary expandIcon={<ExpandMore />} sx={{ bgcolor: "#f0fdf4", minHeight: 44, borderLeft: "4px solid #16a34a", "& .MuiAccordionSummary-content": { my: 0.5 } }}>
+                <AccountBalance sx={{ mr: 1, color: "#16a34a", fontSize: 18 }} />
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", pr: 1 }}>
+                  <Typography variant="subtitle2" fontWeight="bold" color="#166534">
+                    Payment Bank Account ({activeCompany.bankAccounts.length})
+                  </Typography>
+                  {activeCompany.selectedBankAccount && (
+                    <Chip
+                      size="small"
+                      label={activeCompany.selectedBankAccount.bank_name || activeCompany.selectedBankAccount.label}
+                      sx={{ bgcolor: "#dcfce7", color: "#15803d", fontWeight: 700, fontSize: "11px", height: 22 }}
+                    />
+                  )}
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Select payment account for this quotation (synced with dedicated UPI QR code):
+                </Typography>
+
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                  {activeCompany.bankAccounts.map((acc: any) => {
+                    const isSelected = (activeCompany.selectedBankAccountId === acc.id) || (!activeCompany.selectedBankAccountId && acc.is_default);
+                    return (
+                      <Box
+                        key={acc.id}
+                        onClick={() => setSelectedBankAccountId(acc.id)}
+                        sx={{
+                          p: 1.5,
+                          borderRadius: 2,
+                          border: isSelected ? "2px solid #16a34a" : "1px solid #e2e8f0",
+                          bgcolor: isSelected ? "#f0fdf4" : "#ffffff",
+                          cursor: "pointer",
+                          transition: "all 0.15s ease",
+                          "&:hover": { borderColor: "#16a34a", bgcolor: "#f8fafc" },
+                        }}
+                      >
+                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            <Typography variant="body2" fontWeight={700} color={isSelected ? "#166534" : "#1e293b"}>
+                              {acc.bank_name || acc.label || 'Bank Account'}
+                            </Typography>
+                            {acc.is_default && (
+                              <Chip label="Default" size="small" sx={{ height: 18, fontSize: "10px", bgcolor: "#e0f2fe", color: "#0369a1", fontWeight: 700 }} />
+                            )}
+                          </Box>
+                          {isSelected && (
+                            <Chip label="Active on Quote" size="small" color="success" sx={{ height: 20, fontSize: "10px", fontWeight: 700 }} />
+                          )}
+                        </Box>
+
+                        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <Box sx={{ fontSize: "11px", color: "#475569" }}>
+                            <div><strong>A/C Name:</strong> {acc.account_name || activeCompany.name}</div>
+                            <div><strong>A/C No:</strong> {acc.account_number || "—"}</div>
+                            <div><strong>IFSC:</strong> {acc.ifsc || "—"} {acc.bank_branch ? `(${acc.bank_branch})` : ''}</div>
+                            {acc.upi_id && <div><strong>UPI ID:</strong> {acc.upi_id}</div>}
+                          </Box>
+
+                          {acc.qr_code_url ? (
+                            <Box sx={{ textAlign: "center", flexShrink: 0, pl: 1 }}>
+                              <Box
+                                component="img"
+                                src={acc.qr_code_url}
+                                alt="QR"
+                                sx={{ width: 38, height: 38, objectFit: "contain", borderRadius: 1, border: "1px solid #cbd5e1", display: "block" }}
+                              />
+                              <Typography variant="caption" sx={{ display: "block", fontSize: "9px", color: "#16a34a", fontWeight: 600 }}>
+                                QR Synced
+                              </Typography>
+                            </Box>
+                          ) : (
+                            <Box sx={{ textAlign: "center", flexShrink: 0, pl: 1 }}>
+                              <QrCode2 sx={{ fontSize: 24, color: "#94a3b8" }} />
+                              <Typography variant="caption" sx={{ display: "block", fontSize: "9px", color: "#94a3b8" }}>
+                                No QR
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+
+                <Box sx={{ pt: 0.5, display: "flex", justifyContent: "flex-end" }}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    component={Link}
+                    href="/admin/company"
+                    sx={{ textTransform: "none", fontSize: "12px", color: "#1e3a5f" }}
+                  >
+                    Manage / Add Bank Accounts in Settings →
+                  </Button>
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+          )}
 
           {/* ===== B2B / APOLLO STRUCTURE MODE FORM ===== */}
           {isB2BMode && (<>
@@ -2844,20 +3008,28 @@ function QuotationBuilder() {
             </Box>
 
             {/* Bank Details Box */}
-            <Box className="avoid-break" sx={{ mb: 1, bgcolor: "#f8fafc", p: 0.8, borderRadius: 1.5, border: "1px solid #e2e8f0" }}>
-              <Typography sx={{ fontWeight: 800, color: "#b45309", mb: 0.2, textTransform: "uppercase", fontSize: "8px", letterSpacing: 0.8 }}>
-                Bank Transfer / NEFT / RTGS Details
-              </Typography>
-              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.4, fontSize: "8.5px", color: "#475569" }}>
-                <Typography sx={{ fontSize: "8.5px" }}><strong>Account Name:</strong> {activeCompany.bank?.accountName || ""}</Typography>
-                <Typography sx={{ fontSize: "8.5px" }}><strong>Bank:</strong> {activeCompany.bank?.name || ""}</Typography>
-                <Typography sx={{ fontSize: "8.5px" }}><strong>Account No:</strong> {activeCompany.bank?.accountNumber || ""}</Typography>
-                <Typography sx={{ fontSize: "8.5px" }}><strong>IFSC:</strong> {activeCompany.bank?.ifsc || ""}</Typography>
-                <Typography sx={{ fontSize: "8.5px" }}><strong>Branch:</strong> {activeCompany.bank?.branch || ""}</Typography>
-                {activeCompany.bank?.upiId && (
-                  <Typography sx={{ fontSize: "8.5px" }}><strong>UPI:</strong> {activeCompany.bank.upiId}</Typography>
-                )}
+            <Box className="avoid-break" sx={{ mb: 1, bgcolor: "#f8fafc", p: 0.8, borderRadius: 1.5, border: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography sx={{ fontWeight: 800, color: "#b45309", mb: 0.2, textTransform: "uppercase", fontSize: "8px", letterSpacing: 0.8 }}>
+                  Bank Transfer / NEFT / RTGS Details
+                </Typography>
+                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.4, fontSize: "8.5px", color: "#475569" }}>
+                  <Typography sx={{ fontSize: "8.5px" }}><strong>Account Name:</strong> {activeCompany.bank?.accountName || ""}</Typography>
+                  <Typography sx={{ fontSize: "8.5px" }}><strong>Bank:</strong> {activeCompany.bank?.name || ""}</Typography>
+                  <Typography sx={{ fontSize: "8.5px" }}><strong>Account No:</strong> {activeCompany.bank?.accountNumber || ""}</Typography>
+                  <Typography sx={{ fontSize: "8.5px" }}><strong>IFSC:</strong> {activeCompany.bank?.ifsc || ""}</Typography>
+                  <Typography sx={{ fontSize: "8.5px" }}><strong>Branch:</strong> {activeCompany.bank?.branch || ""}</Typography>
+                  {activeCompany.bank?.upiId && (
+                    <Typography sx={{ fontSize: "8.5px" }}><strong>UPI:</strong> {activeCompany.bank.upiId}</Typography>
+                  )}
+                </Box>
               </Box>
+              {activeCompany.qr_code_url && (
+                <Box sx={{ textAlign: "center", flexShrink: 0, pl: 1 }}>
+                  <Box component="img" src={resolveImageUrl(activeCompany.qr_code_url, origin)} alt="Payment QR" sx={{ width: 44, height: 44, objectFit: "contain", mixBlendMode: "multiply", display: "block" }} onError={(e: any) => e.target.style.display = 'none'} />
+                  <Typography sx={{ fontSize: "7px", color: "#64748b", mt: 0.1 }}>Scan to Pay</Typography>
+                </Box>
+              )}
             </Box>
 
             {/* B2B Signatures */}
@@ -2980,6 +3152,31 @@ function QuotationBuilder() {
                   <li key={i} dangerouslySetInnerHTML={{ __html: term.replace(/^([^:]+):/, '<strong>$1:</strong>') }} />
                 ))}
               </Box>
+            </Box>
+
+            {/* Service Bank Details Box */}
+            <Box className="avoid-break" sx={{ mb: 1, bgcolor: "#f8fafc", p: 0.8, borderRadius: 1.5, border: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography sx={{ fontWeight: 800, color: "#0d47a1", mb: 0.2, textTransform: "uppercase", fontSize: "8px", letterSpacing: 0.8 }}>
+                  Bank & Payment Details
+                </Typography>
+                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.4, fontSize: "8.5px", color: "#475569" }}>
+                  <Typography sx={{ fontSize: "8.5px" }}><strong>Account Name:</strong> {activeCompany.bank?.accountName || ""}</Typography>
+                  <Typography sx={{ fontSize: "8.5px" }}><strong>Bank:</strong> {activeCompany.bank?.name || ""}</Typography>
+                  <Typography sx={{ fontSize: "8.5px" }}><strong>Account No:</strong> {activeCompany.bank?.accountNumber || ""}</Typography>
+                  <Typography sx={{ fontSize: "8.5px" }}><strong>IFSC:</strong> {activeCompany.bank?.ifsc || ""}</Typography>
+                  <Typography sx={{ fontSize: "8.5px" }}><strong>Branch:</strong> {activeCompany.bank?.branch || ""}</Typography>
+                  {activeCompany.bank?.upiId && (
+                    <Typography sx={{ fontSize: "8.5px" }}><strong>UPI:</strong> {activeCompany.bank.upiId}</Typography>
+                  )}
+                </Box>
+              </Box>
+              {activeCompany.qr_code_url && (
+                <Box sx={{ textAlign: "center", flexShrink: 0, pl: 1 }}>
+                  <Box component="img" src={resolveImageUrl(activeCompany.qr_code_url, origin)} alt="Payment QR" sx={{ width: 44, height: 44, objectFit: "contain", mixBlendMode: "multiply", display: "block" }} onError={(e: any) => e.target.style.display = 'none'} />
+                  <Typography sx={{ fontSize: "7px", color: "#64748b", mt: 0.1 }}>Scan to Pay</Typography>
+                </Box>
+              )}
             </Box>
 
             {/* Service Signatures */}

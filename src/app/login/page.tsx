@@ -53,6 +53,18 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [company, setCompany] = useState<{ name?: string; logo_url?: string } | null>(null);
+
+  React.useEffect(() => {
+    fetch('/api/company')
+      .then(res => res.json())
+      .then(json => {
+        if (json.success && json.data) {
+          setCompany(json.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // If already logged in, redirect
   React.useEffect(() => {
@@ -126,11 +138,23 @@ function LoginForm() {
             textAlign: 'center',
           }}
         >
-          <Box sx={{ display: 'inline-flex', p: 1.25, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.1)', mb: 1.2 }}>
-            <SolarPower sx={{ fontSize: 36, color: '#f59e0b' }} />
-          </Box>
+          {company?.logo_url ? (
+            <Box sx={{ mb: 1.5, display: 'flex', justifyContent: 'center' }}>
+              <Box
+                component="img"
+                src={company.logo_url}
+                alt="Logo"
+                sx={{ maxHeight: 52, maxWidth: 220, objectFit: 'contain', bgcolor: '#ffffff', p: 0.8, borderRadius: 2 }}
+                onError={(e: any) => { e.target.style.display = 'none'; }}
+              />
+            </Box>
+          ) : (
+            <Box sx={{ display: 'inline-flex', p: 1.25, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.1)', mb: 1.2 }}>
+              <SolarPower sx={{ fontSize: 36, color: '#f59e0b' }} />
+            </Box>
+          )}
           <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: -0.5 }}>
-            Star Link Goods Pvt. Ltd.
+            {company?.name || 'Star Link Goods Pvt. Ltd.'}
           </Typography>
           <Typography variant="caption" sx={{ color: '#94a3b8', letterSpacing: 0.8, textTransform: 'uppercase', fontSize: '10.5px' }}>
             Enterprise Quotation & Solar CRM Platform

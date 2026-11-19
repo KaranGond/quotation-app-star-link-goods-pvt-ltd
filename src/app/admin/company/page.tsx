@@ -37,8 +37,23 @@ import CloseIcon from '@mui/icons-material/Close';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import StarIcon from '@mui/icons-material/Star';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { defaultTerms } from '@/lib/companyDetails';
 import { defaultB2BTerms } from '@/data/apolloProducts';
+
+export interface BankAccount {
+  id: string;
+  label: string;
+  account_name: string;
+  bank_name: string;
+  bank_branch: string;
+  account_number: string;
+  ifsc: string;
+  upi_id: string;
+  qr_code_url: string;
+  is_default: boolean;
+}
 
 export default function CompanySettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -52,7 +67,7 @@ export default function CompanySettingsPage() {
   // Form fields
   const [name, setName] = useState('');
   const [tagline, setTagline] = useState('');
-  const [quotePrefix, setQuotePrefix] = useState('ASS');
+  const [quotePrefix, setQuotePrefix] = useState('SLG');
   const [phone, setPhone] = useState('');
   const [alternatePhone, setAlternatePhone] = useState('');
   const [email, setEmail] = useState('');
@@ -63,7 +78,9 @@ export default function CompanySettingsPage() {
   const [registeredOffice, setRegisteredOffice] = useState('');
   const [warehouse, setWarehouse] = useState('');
 
-  // Bank Details
+  // Bank Details (Multi-Account)
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [uploadingBankQrId, setUploadingBankQrId] = useState<string | null>(null);
   const [bankName, setBankName] = useState('');
   const [bankBranch, setBankBranch] = useState('');
   const [accountName, setAccountName] = useState('');
@@ -99,7 +116,7 @@ export default function CompanySettingsPage() {
         const d = json.data;
         setName(d.name || '');
         setTagline(d.tagline || '');
-        setQuotePrefix(d.quote_prefix || 'ASS');
+        setQuotePrefix(d.quote_prefix || 'SLG');
         setPhone(d.phone || '');
         setAlternatePhone(d.alternate_phone || '');
         setEmail(d.email || '');
@@ -116,6 +133,25 @@ export default function CompanySettingsPage() {
         setAccountNumber(d.account_number || '');
         setIfsc(d.ifsc || '');
         setUpiId(d.upi_id || '');
+
+        if (Array.isArray(d.bank_accounts) && d.bank_accounts.length > 0) {
+          setBankAccounts(d.bank_accounts);
+        } else {
+          setBankAccounts([
+            {
+              id: 'acc_1',
+              label: 'Primary Account (' + (d.bank_name || 'HDFC Bank') + ')',
+              account_name: d.account_name || 'STAR LINK GOODS PVT. LTD.',
+              bank_name: d.bank_name || 'HDFC Bank',
+              bank_branch: d.bank_branch || 'Shivpur, Varanasi',
+              account_number: d.account_number || '50200123854806',
+              ifsc: d.ifsc || 'HDFC0004807',
+              upi_id: d.upi_id || 'vyapar.173575988777@hdfcbank',
+              qr_code_url: d.qr_code_url || '',
+              is_default: true,
+            }
+          ]);
+        }
 
         setLogoUrl(d.logo_url || '');
         const mergedSealSign = d.stamp_url || d.signature_url || '';
@@ -188,6 +224,90 @@ export default function CompanySettingsPage() {
     }
   };
 
+  // Add a new Bank Account
+  const handleAddBankAccount = () => {
+    const newAccount: BankAccount = {
+      id: 'acc_' + Date.now(),
+      label: `Account ${bankAccounts.length + 1}`,
+      account_name: name || 'STAR LINK GOODS PVT. LTD.',
+      bank_name: '',
+      bank_branch: '',
+      account_number: '',
+      ifsc: '',
+      upi_id: '',
+      qr_code_url: '',
+      is_default: bankAccounts.length === 0,
+    };
+    setBankAccounts([...bankAccounts, newAccount]);
+  };
+
+  // Update a Bank Account field
+  const handleUpdateBankAccount = (id: string, field: keyof BankAccount, value: any) => {
+    setBankAccounts(prev => prev.map(acc => {
+      if (acc.id === id) {
+        return { ...acc, [field]: value };
+      }
+      return acc;
+    }));
+  };
+
+  // Set an account as default
+  const handleSetDefaultAccount = (id: string) => {
+    setBankAccounts(prev => prev.map(acc => ({
+      ...acc,
+      is_default: acc.id === id,
+    })));
+  };
+
+  // Delete a bank account
+  const handleDeleteBankAccount = (id: string) => {
+    if (bankAccounts.length <= 1) {
+      setErrorMsg('You must have at least one bank account configured.');
+      setTimeout(() => setErrorMsg(''), 4000);
+      return;
+    }
+    const filtered = bankAccounts.filter(acc => acc.id !== id);
+    if (!filtered.some(a => a.is_default)) {
+      filtered[0].is_default = true;
+    }
+    setBankAccounts(filtered);
+  };
+
+  // Upload QR code image for a specific Bank Account directly to Supabase storage
+  const handleBankQrUpload = async (file: File, accountId: string) => {
+    setUploadingBankQrId(accountId);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'qr');
+      formData.append('auto_update_db', 'false');
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success && data.url) {
+        setBankAccounts(prev => prev.map(acc => {
+          if (acc.id === accountId) {
+            return { ...acc, qr_code_url: data.url };
+          }
+          return acc;
+        }));
+        setSuccessMsg('✅ Bank QR Code uploaded to Supabase Storage successfully!');
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } else {
+        throw new Error(data.message || 'Upload failed');
+      }
+    } catch (err: any) {
+      setErrorMsg('Failed to upload QR: ' + err.message);
+      setTimeout(() => setErrorMsg(''), 5000);
+    } finally {
+      setUploadingBankQrId(null);
+    }
+  };
+
   // Save Company Details
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -201,10 +321,11 @@ export default function CompanySettingsPage() {
     setErrorMsg('');
 
     try {
+      const defaultAcc = bankAccounts.find(a => a.is_default) || bankAccounts[0];
       const payload = {
         name: name.trim(),
         tagline: tagline.trim(),
-        quote_prefix: quotePrefix.trim().toUpperCase() || 'ASS',
+        quote_prefix: quotePrefix.trim().toUpperCase() || 'SLG',
         phone: phone.trim(),
         alternate_phone: alternatePhone.trim(),
         email: email.trim(),
@@ -214,16 +335,17 @@ export default function CompanySettingsPage() {
         head_office: headOffice.trim(),
         registered_office: registeredOffice.trim(),
         warehouse: warehouse.trim(),
-        bank_name: bankName.trim(),
-        bank_branch: bankBranch.trim(),
-        account_name: accountName.trim(),
-        account_number: accountNumber.trim(),
-        ifsc: ifsc.trim().toUpperCase(),
-        upi_id: upiId.trim(),
+        bank_accounts: bankAccounts,
+        bank_name: defaultAcc?.bank_name || bankName.trim(),
+        bank_branch: defaultAcc?.bank_branch || bankBranch.trim(),
+        account_name: defaultAcc?.account_name || accountName.trim(),
+        account_number: defaultAcc?.account_number || accountNumber.trim(),
+        ifsc: (defaultAcc?.ifsc || ifsc).trim().toUpperCase(),
+        upi_id: defaultAcc?.upi_id || upiId.trim(),
         logo_url: logoUrl,
         signature_url: stampUrl || signatureUrl || '',
         stamp_url: stampUrl || signatureUrl || '',
-        qr_code_url: qrCodeUrl,
+        qr_code_url: defaultAcc?.qr_code_url || qrCodeUrl,
         default_terms: {
           rooftop: rooftopTerms,
           b2b: b2bTerms,
@@ -518,8 +640,8 @@ export default function CompanySettingsPage() {
                     label="Quote Number Prefix"
                     value={quotePrefix}
                     onChange={(e) => setQuotePrefix(e.target.value.toUpperCase())}
-                    placeholder="ASS, KSS, etc."
-                    helperText="Appears on quote numbers (e.g. ASS/2026/...)"
+                    placeholder="SLG, KSS, etc."
+                    helperText="Appears on quote numbers (e.g. SLG/2026/...)"
                     size="small"
                   />
                 </Grid>
@@ -647,77 +769,219 @@ export default function CompanySettingsPage() {
             </CardContent>
           </Card>
 
-          {/* Section 3: Bank & UPI Payment Details */}
+          {/* Section 3: Bank & UPI Payment Details (Multi-Account Supported) */}
           <Card elevation={2} sx={{ borderRadius: 2, mb: 3 }}>
             <CardContent>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#1e3a5f', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <AccountBalanceIcon color="primary" /> Bank & UPI Details (Printed on Quotations)
-              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#1e3a5f', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <AccountBalanceIcon color="primary" /> Bank & Payment Accounts ({bankAccounts.length})
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Configure multiple company bank accounts. Switch between them on any quotation. Each account syncs its own payment details and QR code image with Supabase Storage.
+                  </Typography>
+                </Box>
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={handleAddBankAccount}
+                  sx={{ bgcolor: '#1e3a5f', '&:hover': { bgcolor: '#0f172a' }, textTransform: 'none', fontWeight: 700, fontSize: '12px' }}
+                >
+                  Add Bank Account
+                </Button>
+              </Box>
 
-              <Grid container spacing={2}>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Bank Name"
-                    value={bankName}
-                    onChange={(e) => setBankName(e.target.value)}
-                    placeholder="e.g. HDFC Bank"
-                    size="small"
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Bank Branch"
-                    value={bankBranch}
-                    onChange={(e) => setBankBranch(e.target.value)}
-                    placeholder="e.g. Shivpur, Varanasi"
-                    size="small"
-                  />
-                </Grid>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                {bankAccounts.map((acc, index) => (
+                  <Card
+                    key={acc.id}
+                    variant="outlined"
+                    sx={{
+                      p: 2.5,
+                      borderRadius: 2,
+                      borderColor: acc.is_default ? '#3b82f6' : '#e2e8f0',
+                      bgcolor: acc.is_default ? '#f0f7ff' : '#ffffff',
+                      boxShadow: acc.is_default ? '0 0 0 1px #3b82f6' : 'none',
+                    }}
+                  >
+                    {/* Account Header */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, minWidth: 260 }}>
+                        <TextField
+                          size="small"
+                          label={`Account #${index + 1} Label`}
+                          value={acc.label}
+                          onChange={(e) => handleUpdateBankAccount(acc.id, 'label', e.target.value)}
+                          placeholder="e.g. Primary Current Account (HDFC)"
+                          sx={{ minWidth: 280 }}
+                        />
+                        {acc.is_default ? (
+                          <Chip
+                            icon={<StarIcon sx={{ color: '#f59e0b !important', fontSize: '16px !important' }} />}
+                            label="Default Quotation Account"
+                            color="primary"
+                            size="small"
+                            sx={{ fontWeight: 700, fontSize: '11px' }}
+                          />
+                        ) : (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleSetDefaultAccount(acc.id)}
+                            sx={{ textTransform: 'none', fontSize: '11px', fontWeight: 600 }}
+                          >
+                            Set as Default
+                          </Button>
+                        )}
+                      </Box>
 
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Account Holder Name"
-                    value={accountName}
-                    onChange={(e) => setAccountName(e.target.value)}
-                    placeholder="e.g. STAR LINK GOODS PVT. LTD."
-                    size="small"
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Account Number"
-                    value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
-                    placeholder="50200123854806"
-                    size="small"
-                  />
-                </Grid>
+                      {bankAccounts.length > 1 && (
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => handleDeleteBankAccount(acc.id)}
+                          title="Delete this bank account"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </Box>
 
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="IFSC Code"
-                    value={ifsc}
-                    onChange={(e) => setIfsc(e.target.value.toUpperCase())}
-                    placeholder="HDFC0004807"
-                    size="small"
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="UPI ID / VPA"
-                    value={upiId}
-                    onChange={(e) => setUpiId(e.target.value)}
-                    placeholder="vyapar.173575988777@hdfcbank"
-                    size="small"
-                  />
-                </Grid>
-              </Grid>
+                    {/* Account Details & QR Grid */}
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, md: 8 }}>
+                        <Grid container spacing={1.5}>
+                          <Grid size={{ xs: 12, sm: 6 }}>
+                            <TextField
+                              fullWidth
+                              label="Bank Name"
+                              value={acc.bank_name}
+                              onChange={(e) => handleUpdateBankAccount(acc.id, 'bank_name', e.target.value)}
+                              placeholder="e.g. HDFC Bank"
+                              size="small"
+                            />
+                          </Grid>
+                          <Grid size={{ xs: 12, sm: 6 }}>
+                            <TextField
+                              fullWidth
+                              label="Bank Branch"
+                              value={acc.bank_branch}
+                              onChange={(e) => handleUpdateBankAccount(acc.id, 'bank_branch', e.target.value)}
+                              placeholder="e.g. Shivpur, Varanasi"
+                              size="small"
+                            />
+                          </Grid>
+                          <Grid size={{ xs: 12, sm: 6 }}>
+                            <TextField
+                              fullWidth
+                              label="Account Holder Name"
+                              value={acc.account_name}
+                              onChange={(e) => handleUpdateBankAccount(acc.id, 'account_name', e.target.value)}
+                              placeholder="e.g. STAR LINK GOODS PVT. LTD."
+                              size="small"
+                            />
+                          </Grid>
+                          <Grid size={{ xs: 12, sm: 6 }}>
+                            <TextField
+                              fullWidth
+                              label="Account Number"
+                              value={acc.account_number}
+                              onChange={(e) => handleUpdateBankAccount(acc.id, 'account_number', e.target.value)}
+                              placeholder="e.g. 50200123854806"
+                              size="small"
+                            />
+                          </Grid>
+                          <Grid size={{ xs: 12, sm: 6 }}>
+                            <TextField
+                              fullWidth
+                              label="IFSC Code"
+                              value={acc.ifsc}
+                              onChange={(e) => handleUpdateBankAccount(acc.id, 'ifsc', e.target.value.toUpperCase())}
+                              placeholder="e.g. HDFC0004807"
+                              size="small"
+                            />
+                          </Grid>
+                          <Grid size={{ xs: 12, sm: 6 }}>
+                            <TextField
+                              fullWidth
+                              label="UPI ID / VPA"
+                              value={acc.upi_id}
+                              onChange={(e) => handleUpdateBankAccount(acc.id, 'upi_id', e.target.value)}
+                              placeholder="e.g. vyapar.173575988777@hdfcbank"
+                              size="small"
+                            />
+                          </Grid>
+                        </Grid>
+                      </Grid>
+
+                      {/* QR Code Upload for this specific Bank Account */}
+                      <Grid size={{ xs: 12, md: 4 }}>
+                        <Box
+                          sx={{
+                            p: 1.5,
+                            borderRadius: 2,
+                            border: '1px dashed #cbd5e1',
+                            bgcolor: '#ffffff',
+                            textAlign: 'center',
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: '#1e3a5f', mb: 1, display: 'block' }}>
+                            Account UPI QR Code
+                          </Typography>
+                          {acc.qr_code_url ? (
+                            <Box
+                              component="img"
+                              src={acc.qr_code_url}
+                              alt="Account QR"
+                              sx={{ width: 80, height: 80, objectFit: 'contain', mb: 1, borderRadius: 1, border: '1px solid #e2e8f0' }}
+                            />
+                          ) : (
+                            <QrCode2Icon sx={{ fontSize: 48, color: '#94a3b8', mb: 1 }} />
+                          )}
+
+                          <input
+                            type="file"
+                            accept="image/*"
+                            id={`qr-upload-${acc.id}`}
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleBankQrUpload(file, acc.id);
+                            }}
+                          />
+                          <label htmlFor={`qr-upload-${acc.id}`}>
+                            <Button
+                              component="span"
+                              size="small"
+                              variant="outlined"
+                              startIcon={<CloudUploadIcon fontSize="small" />}
+                              disabled={uploadingBankQrId === acc.id}
+                              sx={{ textTransform: 'none', fontSize: '11px', fontWeight: 600 }}
+                            >
+                              {uploadingBankQrId === acc.id ? 'Uploading to Supabase...' : acc.qr_code_url ? 'Replace QR Image' : 'Upload QR Image'}
+                            </Button>
+                          </label>
+
+                          {acc.qr_code_url && (
+                            <Box sx={{ mt: 0.8, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <CheckCircleIcon sx={{ fontSize: 13, color: '#16a34a' }} />
+                              <Typography variant="caption" sx={{ fontSize: '10px', color: '#16a34a', fontWeight: 600 }}>
+                                Synced with Supabase
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </Card>
+                ))}
+              </Box>
             </CardContent>
           </Card>
 

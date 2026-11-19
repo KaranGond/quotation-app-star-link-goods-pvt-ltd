@@ -59,6 +59,9 @@ export async function POST(request: Request) {
           .eq('id', 'default')
           .maybeSingle();
         if (dbCompany) {
+          const bankList = Array.isArray(dbCompany.bank_accounts) ? dbCompany.bank_accounts : [];
+          const activeBank = quoteData.bankAccount || bankList.find((b: any) => b.is_default) || bankList[0];
+
           company = {
             name: dbCompany.name,
             tagline: dbCompany.tagline,
@@ -71,7 +74,14 @@ export async function POST(request: Request) {
             gstin: dbCompany.gstin,
             cin: dbCompany.cin,
             authorizedSignatory: dbCompany.authorized_signatory,
-            bank: {
+            bank: activeBank ? {
+              name: activeBank.bank_name || dbCompany.bank_name,
+              branch: activeBank.bank_branch || dbCompany.bank_branch,
+              accountName: activeBank.account_name || dbCompany.account_name,
+              accountNumber: activeBank.account_number || dbCompany.account_number,
+              ifsc: activeBank.ifsc || dbCompany.ifsc,
+              upiId: activeBank.upi_id || dbCompany.upi_id,
+            } : {
               name: dbCompany.bank_name,
               branch: dbCompany.bank_branch,
               accountName: dbCompany.account_name,
@@ -82,11 +92,24 @@ export async function POST(request: Request) {
             logo_url: dbCompany.logo_url,
             signature_url: dbCompany.signature_url,
             stamp_url: dbCompany.stamp_url,
-            qr_code_url: dbCompany.qr_code_url,
+            qr_code_url: activeBank?.qr_code_url || dbCompany.qr_code_url,
           };
         }
       } catch (dbErr) {
         console.warn('Failed to load company from DB for PDF, using defaults:', dbErr);
+      }
+    } else if (quoteData.bankAccount) {
+      const activeBank = quoteData.bankAccount;
+      company.bank = {
+        name: activeBank.bank_name || company.bank?.name || '',
+        branch: activeBank.bank_branch || company.bank?.branch || '',
+        accountName: activeBank.account_name || company.bank?.accountName || '',
+        accountNumber: activeBank.account_number || company.bank?.accountNumber || '',
+        ifsc: activeBank.ifsc || company.bank?.ifsc || '',
+        upiId: activeBank.upi_id || company.bank?.upiId || '',
+      };
+      if (activeBank.qr_code_url) {
+        company.qr_code_url = activeBank.qr_code_url;
       }
     }
 

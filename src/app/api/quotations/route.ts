@@ -75,6 +75,7 @@ export async function POST(request: Request) {
             pdf_url,
             status,
             form_data,
+            bank_account,
         } = body;
 
         if (!customer_name) {
@@ -145,6 +146,7 @@ export async function POST(request: Request) {
                 status: status || 'draft',
                 pdf_url: pdf_url || null,
                 form_data: form_data || null,
+                bank_account: bank_account || null,
             }])
             .select()
             .single();

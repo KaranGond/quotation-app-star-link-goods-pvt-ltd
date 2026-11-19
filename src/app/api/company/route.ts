@@ -53,6 +53,23 @@ export async function GET() {
       };
     }
 
+    if (!data.bank_accounts || !Array.isArray(data.bank_accounts) || data.bank_accounts.length === 0) {
+      data.bank_accounts = [
+        {
+          id: 'acc_1',
+          label: 'Primary Account (' + (data.bank_name || 'HDFC Bank') + ')',
+          account_name: data.account_name || 'STAR LINK GOODS PVT. LTD.',
+          bank_name: data.bank_name || 'HDFC Bank',
+          bank_branch: data.bank_branch || 'Shivpur, Varanasi',
+          account_number: data.account_number || '50200123854806',
+          ifsc: data.ifsc || 'HDFC0004807',
+          upi_id: data.upi_id || 'vyapar.173575988777@hdfcbank',
+          qr_code_url: data.qr_code_url || '',
+          is_default: true,
+        }
+      ];
+    }
+
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
     console.error('Company API GET error:', error);
@@ -89,6 +106,7 @@ export async function PUT(request: Request) {
       'stamp_url',
       'qr_code_url',
       'default_terms',
+      'bank_accounts',
     ];
 
     const updatePayload: Record<string, any> = {
@@ -135,7 +153,7 @@ function formatCompanyFromDefaults(c: typeof defaultCompanyDetails) {
     id: 'default',
     name: c.name,
     tagline: c.tagline,
-    quote_prefix: 'ASS',
+    quote_prefix: 'SLG',
     gstin: c.gstin || '',
     cin: (c as any).cin || '',
     phone: c.phone || '',
@@ -155,6 +173,20 @@ function formatCompanyFromDefaults(c: typeof defaultCompanyDetails) {
     signature_url: c.signature || '',
     stamp_url: (c as any).stamp || (c as any).signature || '',
     qr_code_url: (c as any).paymentQr || (c as any).qr_code_url || '',
+    bank_accounts: [
+      {
+        id: 'acc_1',
+        label: 'Primary Account (HDFC Bank)',
+        account_name: c.bank?.accountName || 'STAR LINK GOODS PVT. LTD.',
+        bank_name: c.bank?.name || 'HDFC Bank',
+        bank_branch: c.bank?.branch || 'Shivpur, Varanasi',
+        account_number: c.bank?.accountNumber || '50200123854806',
+        ifsc: c.bank?.ifsc || 'HDFC0004807',
+        upi_id: c.bank?.upiId || 'vyapar.173575988777@hdfcbank',
+        qr_code_url: (c as any).paymentQr || '',
+        is_default: true,
+      }
+    ],
     default_terms: defaultTermsStructure,
   };
 }
@@ -164,7 +196,7 @@ function formatDefaultsToDbRow(c: typeof defaultCompanyDetails) {
     id: 'default',
     name: c.name,
     tagline: c.tagline,
-    quote_prefix: 'ASS',
+    quote_prefix: 'SLG',
     gstin: c.gstin || '',
     cin: (c as any).cin || '',
     phone: c.phone || '',
@@ -184,6 +216,20 @@ function formatDefaultsToDbRow(c: typeof defaultCompanyDetails) {
     signature_url: c.signature || '',
     stamp_url: (c as any).stamp || (c as any).signature || '',
     qr_code_url: (c as any).paymentQr || (c as any).qr_code_url || '',
+    bank_accounts: [
+      {
+        id: 'acc_1',
+        label: 'Primary Account (HDFC Bank)',
+        account_name: c.bank?.accountName || 'STAR LINK GOODS PVT. LTD.',
+        bank_name: c.bank?.name || 'HDFC Bank',
+        bank_branch: c.bank?.branch || 'Shivpur, Varanasi',
+        account_number: c.bank?.accountNumber || '50200123854806',
+        ifsc: c.bank?.ifsc || 'HDFC0004807',
+        upi_id: c.bank?.upiId || 'vyapar.173575988777@hdfcbank',
+        qr_code_url: (c as any).paymentQr || '',
+        is_default: true,
+      }
+    ],
     default_terms: defaultTermsStructure,
   };
 }

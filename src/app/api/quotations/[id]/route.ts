@@ -96,6 +96,7 @@ export async function PUT(request: Request, context: RouteContext) {
             status,
             pdf_url,
             form_data,
+            bank_account,
         } = body;
 
         // Recalculate GST and totals
@@ -141,6 +142,10 @@ export async function PUT(request: Request, context: RouteContext) {
 
         if (form_data !== undefined) {
             updateData.form_data = form_data;
+        }
+
+        if (bank_account !== undefined) {
+            updateData.bank_account = bank_account;
         }
 
         const { data, error } = await supabase
