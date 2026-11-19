@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { dbPool, auth } from '@/lib/auth';
+import { dbPool } from '@/lib/auth';
+import { hashPassword } from 'better-auth/crypto';
+import crypto from 'crypto';
 
 export const runtime = 'nodejs';
 
@@ -22,7 +24,7 @@ export async function GET() {
   }
 }
 
-// POST: Create a new user with assigned role
+// POST: Create a new user with assigned role (Admin provisioned)
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -42,8 +44,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+
     // Check if user already exists
-    const existing = await dbPool.query(`SELECT id FROM "user" WHERE email = $1`, [email.trim().toLowerCase()]);
+    const existing = await dbPool.query(`SELECT id FROM "user" WHERE email = $1`, [cleanEmail]);
     if (existing.rows.length > 0) {
       return NextResponse.json(
         { success: false, message: 'A user with this email already exists' },
@@ -51,36 +55,33 @@ export async function POST(request: Request) {
       );
     }
 
-    // Sign up user via Better Auth
-    const signUpRes = await auth.api.signUpEmail({
-      body: {
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        password: password,
-      },
-    });
-
-    if (!signUpRes?.user?.id) {
-      return NextResponse.json(
-        { success: false, message: 'Failed to create user account' },
-        { status: 500 }
-      );
-    }
-
-    // Set role
+    // Hash password with Better Auth's password algorithm
+    const hashedPassword = await hashPassword(password);
+    const userId = 'usr_' + Date.now() + crypto.randomBytes(4).toString('hex');
+    const accountId = 'acc_' + Date.now() + crypto.randomBytes(4).toString('hex');
     const validRole = ['admin', 'sales', 'viewer'].includes(role) ? role : 'sales';
+
+    // 1. Insert into "user"
     await dbPool.query(
-      `UPDATE "user" SET role = $1, "updatedAt" = NOW() WHERE id = $2`,
-      [validRole, signUpRes.user.id]
+      `INSERT INTO "user" (id, name, email, "emailVerified", role, banned, "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, true, $4, false, NOW(), NOW())`,
+      [userId, name.trim(), cleanEmail, validRole]
+    );
+
+    // 2. Insert into "account"
+    await dbPool.query(
+      `INSERT INTO "account" (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
+       VALUES ($1, $2, 'credential', $3, $4, NOW(), NOW())`,
+      [accountId, userId, userId, hashedPassword]
     );
 
     return NextResponse.json({
       success: true,
       message: 'User created successfully',
       user: {
-        id: signUpRes.user.id,
+        id: userId,
         name: name.trim(),
-        email: email.trim().toLowerCase(),
+        email: cleanEmail,
         role: validRole,
       },
     });

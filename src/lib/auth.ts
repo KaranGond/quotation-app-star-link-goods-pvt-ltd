@@ -16,6 +16,7 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET || 'fallback-secret-arpit-solar-shop-2026-auth-key-32',
   emailAndPassword: {
     enabled: true,
+    disableSignUp: true, // Closed enterprise system: public registration disabled
     requireEmailVerification: false,
     minPasswordLength: 6,
   },

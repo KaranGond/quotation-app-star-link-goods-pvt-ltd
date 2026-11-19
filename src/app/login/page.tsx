@@ -9,8 +9,6 @@ import {
   Typography,
   TextField,
   Button,
-  Tabs,
-  Tab,
   Alert,
   CircularProgress,
   InputAdornment,
@@ -23,11 +21,10 @@ import {
   VisibilityOff,
   EmailOutlined,
   LockOutlined,
-  PersonOutline,
   SolarPower,
   ShieldOutlined,
 } from '@mui/icons-material';
-import { signIn, signUp, useSession } from '@/lib/auth-client';
+import { signIn, useSession } from '@/lib/auth-client';
 
 export default function LoginPage() {
   return (
@@ -50,8 +47,6 @@ function LoginForm() {
 
   const { data: session } = useSession();
 
-  const [tab, setTab] = useState<number>(0);
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -94,37 +89,7 @@ function LoginForm() {
     }
   };
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
-    setSuccessMsg('');
-    setLoading(true);
-
-    try {
-      const res = await signUp.email({
-        name: name.trim(),
-        email: email.trim(),
-        password: password,
-      });
-
-      if (res?.error) {
-        setErrorMsg(res.error.message || 'Registration failed.');
-      } else {
-        setSuccessMsg('Account created successfully! You are now logged in.');
-        setTimeout(() => {
-          router.push(redirectUrl);
-          router.refresh();
-        }, 800);
-      }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Registration failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fillDemo = (demoEmail: string, demoPass: string) => {
-    setTab(0);
     setEmail(demoEmail);
     setPassword(demoPass);
     setErrorMsg('');
@@ -140,7 +105,6 @@ function LoginForm() {
         justifyContent: 'center',
         alignItems: 'center',
         p: 2,
-        backgroundImage: 'radial-gradient(at 50% 0%, rgba(30, 58, 95, 0.08) 0px, transparent 60%)',
       }}
     >
       <Card
@@ -173,22 +137,14 @@ function LoginForm() {
           </Typography>
         </Box>
 
-        {/* Tab Switcher */}
-        <Box sx={{ borderBottom: 1, borderColor: '#e2e8f0', bgcolor: '#ffffff' }}>
-          <Tabs
-            value={tab}
-            onChange={(_, val) => {
-              setTab(val);
-              setErrorMsg('');
-              setSuccessMsg('');
-            }}
-            variant="fullWidth"
-            textColor="primary"
-            indicatorColor="primary"
-          >
-            <Tab label="Sign In" sx={{ fontWeight: 700, textTransform: 'none' }} />
-            <Tab label="Create Account" sx={{ fontWeight: 700, textTransform: 'none' }} />
-          </Tabs>
+        {/* Sign In Header */}
+        <Box sx={{ p: 2, px: 3, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'center' }}>
+          <Typography variant="subtitle1" fontWeight={700} color="#1e3a5f">
+            Sign In to Your Workspace
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Enter your authorized business credentials to continue
+          </Typography>
         </Box>
 
         <CardContent sx={{ p: 3, bgcolor: '#ffffff' }}>
@@ -204,160 +160,101 @@ function LoginForm() {
             </Alert>
           )}
 
-          {tab === 0 ? (
-            /* Sign In Form */
-            <form onSubmit={handleSignIn}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <TextField
-                  fullWidth
-                  label="Email Address"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  size="small"
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <EmailOutlined sx={{ color: '#64748b', fontSize: 20 }} />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
+          {/* Sign In Form */}
+          <form onSubmit={handleSignIn}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <TextField
+                fullWidth
+                label="Email Address"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                size="small"
+                placeholder="name@company.com"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <EmailOutlined sx={{ color: '#64748b', fontSize: 20 }} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
 
-                <TextField
-                  fullWidth
-                  label="Password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  size="small"
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <LockOutlined sx={{ color: '#64748b', fontSize: 20 }} />
-                      </InputAdornment>
-                    ),
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          size="small"
-                          onClick={() => setShowPassword(!showPassword)}
-                          edge="end"
-                        >
-                          {showPassword ? <VisibilityOff sx={{ fontSize: 18 }} /> : <Visibility sx={{ fontSize: 18 }} />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                />
+              <TextField
+                fullWidth
+                label="Password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                size="small"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <LockOutlined sx={{ color: '#64748b', fontSize: 20 }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        size="small"
+                        onClick={() => setShowPassword(!showPassword)}
+                        edge="end"
+                      >
+                        {showPassword ? <VisibilityOff sx={{ fontSize: 18 }} /> : <Visibility sx={{ fontSize: 18 }} />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
 
-                <Button
-                  fullWidth
-                  type="submit"
-                  variant="contained"
-                  disabled={loading}
-                  sx={{
-                    mt: 1,
-                    py: 1.2,
-                    fontWeight: 700,
-                    textTransform: 'none',
-                    bgcolor: '#1e3a5f',
-                    '&:hover': { bgcolor: '#0f172a' },
-                  }}
-                >
-                  {loading ? <CircularProgress size={22} sx={{ color: '#ffffff' }} /> : 'Sign In to Workspace'}
-                </Button>
-              </Box>
-            </form>
-          ) : (
-            /* Sign Up Form */
-            <form onSubmit={handleSignUp}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <TextField
-                  fullWidth
-                  label="Full Name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  size="small"
-                  placeholder="e.g. John Doe"
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <PersonOutline sx={{ color: '#64748b', fontSize: 20 }} />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
+              <Button
+                fullWidth
+                type="submit"
+                variant="contained"
+                disabled={loading}
+                sx={{
+                  mt: 1,
+                  py: 1.2,
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  bgcolor: '#1e3a5f',
+                  '&:hover': { bgcolor: '#0f172a' },
+                }}
+              >
+                {loading ? <CircularProgress size={22} sx={{ color: '#ffffff' }} /> : 'Sign In'}
+              </Button>
+            </Box>
+          </form>
 
-                <TextField
-                  fullWidth
-                  label="Work Email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  size="small"
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <EmailOutlined sx={{ color: '#64748b', fontSize: 20 }} />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-
-                <TextField
-                  fullWidth
-                  label="Password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  size="small"
-                  helperText="Minimum 6 characters"
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <LockOutlined sx={{ color: '#64748b', fontSize: 20 }} />
-                      </InputAdornment>
-                    ),
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          size="small"
-                          onClick={() => setShowPassword(!showPassword)}
-                          edge="end"
-                        >
-                          {showPassword ? <VisibilityOff sx={{ fontSize: 18 }} /> : <Visibility sx={{ fontSize: 18 }} />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-
-                <Button
-                  fullWidth
-                  type="submit"
-                  variant="contained"
-                  disabled={loading}
-                  sx={{
-                    mt: 1,
-                    py: 1.2,
-                    fontWeight: 700,
-                    textTransform: 'none',
-                    bgcolor: '#1e3a5f',
-                    '&:hover': { bgcolor: '#0f172a' },
-                  }}
-                >
-                  {loading ? <CircularProgress size={22} sx={{ color: '#ffffff' }} /> : 'Create Account'}
-                </Button>
-              </Box>
-            </form>
-          )}
+          {/* Invite-Only Security Notice */}
+          <Box
+            sx={{
+              mt: 2.5,
+              p: 1.5,
+              bgcolor: '#f8fafc',
+              borderRadius: 2,
+              border: '1px solid #e2e8f0',
+              textAlign: 'center',
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{
+                color: '#64748b',
+                fontSize: '11.5px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 0.6,
+                fontWeight: 500,
+              }}
+            >
+              <LockOutlined sx={{ fontSize: 14, color: '#94a3b8' }} />
+              Closed Enterprise System. Accounts are created by Administrators.
+            </Typography>
+          </Box>
 
           {/* Quick Demo Credentials */}
           <Divider sx={{ my: 2.5 }}>
@@ -380,7 +277,7 @@ function LoginForm() {
       </Card>
 
       <Typography variant="caption" sx={{ mt: 3, color: '#94a3b8', fontSize: '11px' }}>
-        Protected by Better Auth (Self-Hosted) & CASL Role-Based Authorization
+        Protected by Better Auth & CASL Role-Based Authorization
       </Typography>
     </Box>
   );
