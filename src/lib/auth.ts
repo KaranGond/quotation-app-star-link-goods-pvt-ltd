@@ -17,31 +17,23 @@ export const dbPool = new Pool({
   idleTimeoutMillis: 30000,
 });
 
-// Dynamic Base URL detection for Vercel, Production, and Localhost
+// Dynamic Base URL detection: seamlessly handles both Localhost and Vercel Production
 const getAuthBaseUrl = () => {
-  // If running locally in development (npm run dev), always use localhost
-  if (process.env.NODE_ENV === 'development') {
-    return 'http://localhost:3000';
-  }
-
-  // If explicitly configured with a remote/production URL, use it
-  if (process.env.BETTER_AUTH_URL && !process.env.BETTER_AUTH_URL.includes('localhost')) {
-    return process.env.BETTER_AUTH_URL;
-  }
-  if (process.env.NEXT_PUBLIC_APP_URL && !process.env.NEXT_PUBLIC_APP_URL.includes('localhost')) {
-    return process.env.NEXT_PUBLIC_APP_URL;
-  }
-  // Vercel auto-provided URLs
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  }
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
-  // Deployment specific domain for Vercel
-  if (process.env.NODE_ENV === 'production') {
+  // 1. When deployed to Vercel or running in production cloud
+  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    if (process.env.BETTER_AUTH_URL && !process.env.BETTER_AUTH_URL.includes('localhost')) {
+      return process.env.BETTER_AUTH_URL;
+    }
+    if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+      return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+    }
+    if (process.env.VERCEL_URL) {
+      return `https://${process.env.VERCEL_URL}`;
+    }
     return 'https://quotation-app-star-link-goods-pvt-l.vercel.app';
   }
+
+  // 2. When running locally (npm run dev on http://localhost:3000)
   return 'http://localhost:3000';
 };
 
@@ -51,6 +43,7 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET || '4f71e9b2cc03bf9e83cd641e459be2d3cb0b06afbdf385ce8bf41485455b4194',
   trustedOrigins: [
     'http://localhost:3000',
+    'http://127.0.0.1:3000',
     'https://*.vercel.app',
     'https://quotation-app-star-link-goods-pvt-l.vercel.app',
     ...(process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : []),
