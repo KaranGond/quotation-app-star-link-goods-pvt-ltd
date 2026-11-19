@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     // Env validation
     const missingEnv: string[] = [];
     if (!process.env.SUPABASE_URL && !process.env.NEXT_PUBLIC_SUPABASE_URL) missingEnv.push('SUPABASE_URL');
-    if (!process.env.SUPABASE_KEY && !process.env.SUPABASE_SERVICE_ROLE_KEY) missingEnv.push('SUPABASE_SERVICE_ROLE_KEY');
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY && !process.env.SUPABASE_KEY) missingEnv.push('SUPABASE_SERVICE_ROLE_KEY');
     if (!process.env.SUPABASE_BUCKET) missingEnv.push('SUPABASE_BUCKET');
     if (missingEnv.length) {
       return NextResponse.json({ message: `Missing environment variables: ${missingEnv.join(', ')}` }, { status: 500 });
@@ -261,12 +261,12 @@ export async function POST(request: Request) {
 export async function GET() {
   try {
     const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_KEY;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const bucket = process.env.SUPABASE_BUCKET || 'quotes';
 
     const missingRequired: string[] = [];
     if (!supabaseUrl) missingRequired.push('SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL)');
-    if (!supabaseKey) missingRequired.push('SUPABASE_KEY (or SUPABASE_SERVICE_ROLE_KEY)');
+    if (!supabaseKey) missingRequired.push('SUPABASE_SERVICE_ROLE_KEY');
 
     const optionalIntegrations = {
       supabaseBucket: bucket,
