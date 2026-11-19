@@ -516,7 +516,7 @@ export const defaultB2BTerms: string[] = [
 
 // Helper to convert number to Indian Rupees in words
 export function numberToWordsINR(amount: number): string {
-  if (amount === 0) return "Zero Rupees Only";
+  if (!amount || amount <= 0) return "Zero Rupees Only";
   const a = [
     "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
     "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
@@ -524,10 +524,21 @@ export function numberToWordsINR(amount: number): string {
   ];
   const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
 
-  function inWords(num: number): string {
-    if (num < 20) return a[num];
-    const digit = num % 10;
-    return b[Math.floor(num / 10)] + (digit !== 0 ? " " + a[digit] : "");
+  function inHundreds(num: number): string {
+    let s = "";
+    if (num >= 100) {
+      s += a[Math.floor(num / 100)] + " Hundred ";
+      num %= 100;
+    }
+    if (num > 0) {
+      if (num < 20) {
+        s += a[num];
+      } else {
+        const digit = num % 10;
+        s += b[Math.floor(num / 10)] + (digit !== 0 ? " " + a[digit] : "");
+      }
+    }
+    return s.trim();
   }
 
   const rounded = Math.round(amount);
@@ -538,11 +549,11 @@ export function numberToWordsINR(amount: number): string {
   const rest = rounded % 100;
 
   let str = "";
-  if (crore > 0) str += inWords(crore) + " Crore ";
-  if (lakh > 0) str += inWords(lakh) + " Lakh ";
-  if (thousand > 0) str += inWords(thousand) + " Thousand ";
-  if (hundred > 0) str += inWords(hundred) + " Hundred ";
-  if (rest > 0) str += inWords(rest) + " ";
+  if (crore > 0) str += inHundreds(crore) + " Crore ";
+  if (lakh > 0) str += inHundreds(lakh) + " Lakh ";
+  if (thousand > 0) str += inHundreds(thousand) + " Thousand ";
+  if (hundred > 0) str += inHundreds(hundred) + " Hundred ";
+  if (rest > 0) str += inHundreds(rest) + " ";
 
   return str.trim() + " Rupees Only";
 }

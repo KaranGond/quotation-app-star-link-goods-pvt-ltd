@@ -23,6 +23,8 @@ import {
 import { ArrowBack, Visibility, Delete, Search, WhatsApp, Edit, Construction, Add } from "@mui/icons-material";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { buildQuoteWhatsAppMessage, openWhatsAppDirect } from "@/lib/whatsappShare";
+import { companyDetails as fallbackCompanyDetails } from "@/lib/companyDetails";
 
 type Quotation = {
     id: string;
@@ -96,6 +98,64 @@ export default function QuotationsAdminPage() {
             month: "short",
             year: "numeric",
         });
+    };
+
+    const [companyInfo, setCompanyInfo] = useState<any>(fallbackCompanyDetails);
+
+    useEffect(() => {
+        fetch("/api/company")
+            .then((res) => res.json())
+            .then((json) => {
+                if (json.success && json.data) setCompanyInfo(json.data);
+            })
+            .catch(() => {});
+    }, []);
+
+    const handleShareWhatsApp = (q: Quotation) => {
+        if (!q.customer_phone) {
+            alert("No customer phone number recorded for this quotation.");
+            return;
+        }
+
+        const b2b = isB2B(q);
+        const srv = isService(q);
+
+        const message = buildQuoteWhatsAppMessage({
+            customerName: q.customer_name,
+            customerPhone: q.customer_phone,
+            quoteNumber: q.quote_number || "QUOTE",
+            quoteDate: formatDate(q.created_at),
+            systemCapacityKw: b2b || srv ? undefined : q.capacity_kw,
+            systemType: b2b
+                ? "Commercial Mounting Structure & BOS"
+                : srv
+                ? "Solar Service & O&M"
+                : q.system_type_name || "Solar Power Plant",
+            totalAmount: q.total_amount || 0,
+            pdfUrl: q.pdf_url || null,
+            vendorName: companyInfo.name || fallbackCompanyDetails.name,
+            vendorSignatory:
+                companyInfo.authorized_signatory ||
+                companyInfo.authorizedSignatory ||
+                fallbackCompanyDetails.authorizedSignatory,
+            vendorPhone: companyInfo.phone || fallbackCompanyDetails.phone,
+            isB2B: b2b,
+            b2bDetails: b2b
+                ? {
+                      refNumber: q.quote_number || undefined,
+                      grandTotal: q.total_amount || undefined,
+                  }
+                : undefined,
+            isService: srv,
+            serviceDetails: srv
+                ? {
+                      refNumber: q.quote_number || undefined,
+                      grandTotal: q.total_amount || undefined,
+                  }
+                : undefined,
+        });
+
+        openWhatsAppDirect(q.customer_phone, message);
     };
 
     const getStatusColor = (status: string) => {
@@ -361,7 +421,7 @@ export default function QuotationsAdminPage() {
                                                         </IconButton>
                                                     </Tooltip>
                                                     <Tooltip title="Send via WhatsApp">
-                                                        <IconButton size="small" color="success">
+                                                        <IconButton size="small" color="success" onClick={() => handleShareWhatsApp(quotation)}>
                                                             <WhatsApp fontSize="small" />
                                                         </IconButton>
                                                     </Tooltip>

@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getServerSupabase } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
-
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(request: Request) {
   try {
@@ -65,6 +61,7 @@ export async function POST(request: Request) {
       raw_payload: body ?? null,
     };
 
+    const supabase = getServerSupabase();
     const { error } = await supabase.from('internal_quotes').insert([row]);
     if (error) throw error;
 

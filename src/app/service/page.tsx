@@ -2,24 +2,84 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Box, Typography, TextField, Button, IconButton, Snackbar, Alert,
-  FormControl, InputLabel, Select, MenuItem, InputAdornment,
-  Accordion, AccordionSummary, AccordionDetails, Tooltip,
+  InputAdornment, Accordion, AccordionSummary, AccordionDetails, Tooltip,
 } from "@mui/material";
 import {
   Add, Delete, Edit, Print, RestartAlt, ExpandMore, Person,
-  AttachMoney, ListAlt, CleaningServices, Home,
+  AttachMoney, ListAlt, CleaningServices, Home, WhatsApp,
 } from "@mui/icons-material";
 import { useReactToPrint } from "react-to-print";
 import Link from "next/link";
 import {
-  companies, defaultServiceItems, defaultServiceTerms,
+  companies, resolveImageUrl, defaultServiceItems, defaultServiceTerms,
   serviceGstRate, generateServiceRefNumber,
 } from "@/lib/companyDetails";
 import type { ServiceItem } from "@/lib/companyDetails";
+import { buildQuoteWhatsAppMessage, openWhatsAppDirect } from "@/lib/whatsappShare";
 
 export default function ServiceProposalBuilder() {
-  const [selectedCompanyId, setSelectedCompanyId] = useState("krishnanuja");
-  const company = useMemo(() => companies.find(c => c.id === selectedCompanyId) || companies[1] || companies[0], [selectedCompanyId]);
+  const selectedCompanyId = "arpit";
+  const [customCompany, setCustomCompany] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/api/company')
+      .then(res => res.json())
+      .then(json => {
+        if (json.success && json.data) {
+          const d = json.data;
+          setCustomCompany({
+            id: 'default',
+            name: d.name,
+            tagline: d.tagline,
+            gstin: d.gstin,
+            cin: d.cin,
+            headOffice: d.head_office,
+            registeredOffice: d.registered_office,
+            warehouse: d.warehouse,
+            phone: d.phone,
+            alternatePhone: d.alternate_phone,
+            email: d.email,
+            bank: {
+              name: d.bank_name,
+              branch: d.bank_branch,
+              accountName: d.account_name,
+              accountNumber: d.account_number,
+              ifsc: d.ifsc,
+              upiId: d.upi_id,
+            },
+            logo: d.logo_url || companies[0].logo,
+            signature: d.signature_url || companies[0].signature,
+            stamp: d.stamp_url || companies[0].stamp,
+            stamp_url: d.stamp_url || companies[0].stamp,
+            signature_url: d.signature_url || companies[0].signature,
+            logo_url: d.logo_url || companies[0].logo,
+            authorizedSignatory: d.authorized_signatory || 'Authorized Signatory',
+          });
+        }
+      })
+      .catch(err => console.warn('Could not load company from /api/company:', err));
+  }, []);
+
+  const company = useMemo(() => {
+    if (customCompany) return customCompany;
+    return companies.find(c => c.id === selectedCompanyId) || companies[0];
+  }, [customCompany, selectedCompanyId]);
+
+  const renderSealAndSign = (c: any) => {
+    const seal = c.stamp_url || c.signature_url || c.stamp || c.signature || companies[0].signature;
+    const resolved = resolveImageUrl(seal, origin);
+    if (!resolved) return <Box sx={{ height: 48 }} />;
+
+    return (
+      <Box
+        component="img"
+        src={resolved}
+        alt="Official Rubber Stamp Seal with Signature"
+        sx={{ width: 140, height: 50, objectFit: "contain", display: "block", ml: "auto", my: 0.2 }}
+        onError={(e: any) => e.target.style.display = 'none'}
+      />
+    );
+  };
 
   const [clientName, setClientName] = useState("");
   const [clientPhone, setClientPhone] = useState("");
@@ -104,7 +164,7 @@ export default function ServiceProposalBuilder() {
     pageStyle: printPageStyle,
   });
 
-  const refNumber = useMemo(() => generateServiceRefNumber(company.id === "krishnanuja" ? "KRPL" : "ASS"), [company.id]);
+  const refNumber = useMemo(() => generateServiceRefNumber("ASS"), []);
   const currentDate = useMemo(() => new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }).replace(/^(\d+)\s/, "$1 "), []);
 
   const subtotal = useMemo(() => items.reduce((s, i) => s + i.amount, 0), [items]);
@@ -116,9 +176,16 @@ export default function ServiceProposalBuilder() {
   const updateItem = (idx: number, field: keyof ServiceItem, val: string | number) => {
     const updated = [...items];
     (updated[idx] as any)[field] = val;
-    if (field === "rate" || field === "qty") {
-      updated[idx].amount = parseFloat(updated[idx].qty) * (updated[idx].rate || 0);
-      updated[idx].monthlyRate = +(updated[idx].amount / 12).toFixed(2);
+    if (field === "rate" || field === "qty" || field === "unit") {
+      const qty = parseFloat(updated[idx].qty) || 0;
+      const rate = updated[idx].rate || 0;
+      if (updated[idx].unit === "Month") {
+        updated[idx].amount = +(qty * rate * 12).toFixed(2);
+        updated[idx].monthlyRate = rate;
+      } else {
+        updated[idx].amount = +(qty * rate).toFixed(2);
+        updated[idx].monthlyRate = +(rate / 12).toFixed(2);
+      }
     }
     setItems(updated);
   };
@@ -131,6 +198,36 @@ export default function ServiceProposalBuilder() {
     setItems(JSON.parse(JSON.stringify(defaultServiceItems)));
     setTerms([...defaultServiceTerms]); setGstRate(serviceGstRate);
     setProposalTitle("PROPOSAL FOR O&M SERVICES");
+  };
+
+  const handleWhatsApp = () => {
+    if (!clientName.trim()) {
+      setNotification({ open: true, message: "Client name is required for WhatsApp", severity: "error" });
+      return;
+    }
+    if (!clientPhone.trim()) {
+      setNotification({ open: true, message: "Client phone is required for WhatsApp", severity: "error" });
+      return;
+    }
+
+    const messageText = buildQuoteWhatsAppMessage({
+      customerName: clientName,
+      customerPhone: clientPhone,
+      quoteNumber: refNumber,
+      totalAmount: grandTotal,
+      vendorName: company.name,
+      vendorSignatory: (company as any).authorizedSignatory || (company as any).authorized_signatory,
+      vendorPhone: company.phone,
+      isService: true,
+      serviceDetails: {
+        refNumber,
+        itemCount: items.length,
+        grandTotal,
+      },
+    });
+
+    openWhatsAppDirect(clientPhone, messageText);
+    setNotification({ open: true, message: "✅ WhatsApp opened with pre-filled service proposal!", severity: "success" });
   };
 
   return (
@@ -175,16 +272,6 @@ export default function ServiceProposalBuilder() {
         </Box>
 
         <Box sx={{ flex: 1, overflow: "auto", p: 0 }}>
-          {/* Company */}
-          <Box sx={{ p: 2, borderBottom: "1px solid #e2e8f0", bgcolor: "#f8fafc" }}>
-            <FormControl fullWidth size="small">
-              <InputLabel>Company</InputLabel>
-              <Select value={selectedCompanyId} label="Company" onChange={(e) => setSelectedCompanyId(e.target.value)}>
-                {companies.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
-              </Select>
-            </FormControl>
-          </Box>
-
           {/* Client Details */}
           <Accordion defaultExpanded disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
             <AccordionSummary expandIcon={<ExpandMore />} sx={{ bgcolor: "#f8fafc", minHeight: 44 }}>
@@ -267,6 +354,7 @@ export default function ServiceProposalBuilder() {
         {/* Actions */}
         <Box sx={{ p: 1.5, borderTop: "1px solid #e2e8f0", display: "flex", gap: 1 }}>
           <Tooltip title="Print Proposal"><Button variant="contained" size="small" startIcon={<Print />} onClick={() => handlePrint()} sx={{ flex: 1, bgcolor: "#0d47a1", "&:hover": { bgcolor: "#1565c0" } }}>Print</Button></Tooltip>
+          <Tooltip title="Send via WhatsApp"><Button variant="contained" size="small" startIcon={<WhatsApp />} onClick={handleWhatsApp} sx={{ flex: 1, bgcolor: "#25D366", "&:hover": { bgcolor: "#128C7E" } }}>WhatsApp</Button></Tooltip>
           <Tooltip title="Reset"><IconButton size="small" onClick={handleReset} color="error"><RestartAlt /></IconButton></Tooltip>
         </Box>
       </Box>
@@ -278,7 +366,7 @@ export default function ServiceProposalBuilder() {
           {/* Header */}
           <Box className="avoid-break" sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "4px solid #0d47a1", pb: 1.5, mb: 1.5 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Box component="img" src={origin ? `${origin}${company.logo}` : company.logo} alt="Logo" sx={{ maxHeight: company.id === "krishnanuja" ? 95 : 72, maxWidth: company.id === "krishnanuja" ? 125 : 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+              <Box component="img" src={resolveImageUrl(company.logo || company.logo_url, origin)} alt="Logo" sx={{ maxHeight: 72, maxWidth: 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
               <Box>
                 <Typography sx={{ fontSize: company.name.length > 25 ? "15px" : "22px", fontWeight: 900, color: "#0d47a1", letterSpacing: "-0.5px", lineHeight: 1.1, textTransform: "uppercase" }}>{company.name}</Typography>
                 <Typography sx={{ fontSize: "9.5px", fontWeight: 600, color: "#64748b", mt: 0.25, letterSpacing: 0.8, textTransform: "uppercase" }}>{company.tagline}</Typography>
@@ -385,9 +473,9 @@ export default function ServiceProposalBuilder() {
             </Box>
             <Box sx={{ textAlign: "right" }}>
               <Typography sx={{ fontSize: "12px", fontWeight: 900, color: "#0d47a1", mb: 0, textDecoration: "underline", textDecorationColor: "#0d47a1", textUnderlineOffset: 3 }}>For {company.name}</Typography>
-              <Box component="img" src={origin ? `${origin}${(company as any).signature || '/signature.png'}` : ((company as any).signature || '/signature.png')} alt="Signature" sx={{ width: 160, height: 70, objectFit: "contain", display: "block", ml: "auto", my: 0.5 }} onError={(e: any) => e.target.style.display = 'none'} />
+              {renderSealAndSign(company)}
               <Box sx={{ width: 160, height: 1, bgcolor: "#cbd5e1", mb: 0.25, ml: "auto" }} />
-              <Typography sx={{ fontSize: "8px", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>Authorized Signatory</Typography>
+              <Typography sx={{ fontSize: "8px", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>{(company as any).authorizedSignatory || (company as any).authorized_signatory || "Authorized Signatory"}</Typography>
             </Box>
           </Box>
         </Box>

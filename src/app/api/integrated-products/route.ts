@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getServerSupabase } from '@/lib/supabase';
 import { integratedProductSchema } from '../../../lib/schemas/integratedProduct';
 
 export const runtime = 'nodejs';
-
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(request: Request) {
   try {
@@ -17,6 +13,7 @@ export async function POST(request: Request) {
     }
 
     const row = { ...parsed.data } as Record<string, any>;
+    const supabase = getServerSupabase();
 
     const { data, error } = await supabase.from('integrated_products').insert([row]).select();
     if (error) throw error;
@@ -30,6 +27,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
+    const supabase = getServerSupabase();
     const { data, error } = await supabase
       .from('integrated_products')
       .select('*')

@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
 // Use dynamic imports to support serverless-compatible Chromium in production
-import { createClient } from '@supabase/supabase-js';
 import { sendWhatsAppMessage } from '../../../lib/whatsapp';
 import { generateQuoteHtml } from '../../../lib/quoteTemplate';
 import { defaultComponents } from '../../../data/components';
 import { GST_RATE } from '../../../data/priceList';
+import { resolveImageAsBase64 } from '@/lib/imageResolver';
+import { getServerSupabase } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
 
@@ -49,55 +48,95 @@ export async function POST(request: Request) {
     const discount = Math.max(0, n(calc.discount));
     const grandTotal = Math.max(0, +(total - discount).toFixed(2));
 
-    // Attach components list to the PDF payload
-    // Resolve absolute logo URL from public folder so Chromium can fetch it
-    const origin = process.env.APP_ORIGIN || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-    let logoUrl = `${origin}/logo.png`;
-    try {
-      const logoPath = path.join(process.cwd(), 'public', 'logo.png');
-      const logoBuffer = await fs.readFile(logoPath);
-      logoUrl = `data:image/png;base64,${logoBuffer.toString('base64')}`;
-    } catch (logoError) {
-      console.warn('Falling back to origin logo URL', logoError);
+    // 1. Resolve company details (from request payload or DB)
+    let company = quoteData.companyDetails;
+    if (!company) {
+      try {
+        const supabase = getServerSupabase();
+        const { data: dbCompany } = await supabase
+          .from('company_settings')
+          .select('*')
+          .eq('id', 'default')
+          .maybeSingle();
+        if (dbCompany) {
+          company = {
+            name: dbCompany.name,
+            tagline: dbCompany.tagline,
+            phone: dbCompany.phone,
+            alternatePhone: dbCompany.alternate_phone,
+            email: dbCompany.email,
+            headOffice: dbCompany.head_office,
+            registeredOffice: dbCompany.registered_office,
+            warehouse: dbCompany.warehouse,
+            gstin: dbCompany.gstin,
+            cin: dbCompany.cin,
+            authorizedSignatory: dbCompany.authorized_signatory,
+            bank: {
+              name: dbCompany.bank_name,
+              branch: dbCompany.bank_branch,
+              accountName: dbCompany.account_name,
+              accountNumber: dbCompany.account_number,
+              ifsc: dbCompany.ifsc,
+              upiId: dbCompany.upi_id,
+            },
+            logo_url: dbCompany.logo_url,
+            signature_url: dbCompany.signature_url,
+            stamp_url: dbCompany.stamp_url,
+            qr_code_url: dbCompany.qr_code_url,
+          };
+        }
+      } catch (dbErr) {
+        console.warn('Failed to load company from DB for PDF, using defaults:', dbErr);
+      }
     }
 
-    // Load Static Payment QR Code
-    let qrCodeUrl = '';
-    const upiLink = `upi://pay?pa=${quoteData.companyDetails?.bank?.upiId || 'vyapar.173575988777@hdfcbank'}&pn=${encodeURIComponent(quoteData.companyDetails?.name || 'Arpit Solar Shop')}&am=${grandTotal}&cu=INR`;
+    // Resolve brand assets into base64 for reliable Puppeteer rendering
+    const defaultSupabaseLogo = 'https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-logo.png';
+    const defaultSupabaseSig = 'https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-signature.png';
+    const defaultSupabaseQr = 'https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-payment-qr.png';
 
-    try {
-      const qrPath = path.join(process.cwd(), 'public', 'payment.png');
-      const qrBuffer = await fs.readFile(qrPath);
-      qrCodeUrl = `data:image/png;base64,${qrBuffer.toString('base64')}`;
-    } catch (qrError) {
-      console.warn('payment.png not found', qrError);
-    }
+    const rawLogo = company?.logo_url || company?.logo || defaultSupabaseLogo;
+    const rawSig = company?.signature_url || company?.signature || defaultSupabaseSig;
+    const rawStamp = company?.stamp_url || company?.stamp || defaultSupabaseSig;
+    const rawQr = company?.qr_code_url || defaultSupabaseQr;
 
-    let signatureUrl = '';
-    try {
-      const sigPath = path.join(process.cwd(), 'public', 'signature.png');
-      const sigBuffer = await fs.readFile(sigPath);
-      signatureUrl = `data:image/png;base64,${sigBuffer.toString('base64')}`;
-    } catch (sigError) {
-      console.warn('Signature image not found', sigError);
-    }
+    const [logoUrl, signatureUrl, stampUrl, qrCodeUrl] = await Promise.all([
+      resolveImageAsBase64(rawLogo),
+      resolveImageAsBase64(rawSig),
+      resolveImageAsBase64(rawStamp),
+      resolveImageAsBase64(rawQr),
+    ]);
+
+    const upiLink = `upi://pay?pa=${company?.bank?.upiId || company?.upi_id || 'vyapar.173575988777@hdfcbank'}&pn=${encodeURIComponent(company?.name || 'Arpit Solar Shop')}&am=${grandTotal}&cu=INR`;
 
     const htmlContent = generateQuoteHtml({
       ...quoteData,
+      companyDetails: company,
       components: quoteData.components || defaultComponents,
       logoUrl,
       signatureUrl,
+      stampUrl,
       panelWarranty: quoteData.selectedProduct?.panelWarranty || "25 Years",
       inverterWarranty: quoteData.selectedProduct?.inverterWarranty || "5 Years",
+      showInverterWarranty: quoteData.selectedProduct?.showInverterWarranty !== undefined
+        ? quoteData.selectedProduct.showInverterWarranty
+        : (quoteData.showInverterWarranty !== undefined ? quoteData.showInverterWarranty : true),
+      showRatePerWatt: quoteData.selectedProduct?.showRatePerWatt !== undefined
+        ? quoteData.selectedProduct.showRatePerWatt
+        : (quoteData.showRatePerWatt !== undefined ? quoteData.showRatePerWatt : true),
       batteryWarranty: quoteData.selectedProduct?.batteryWarranty || "5 Years",
+      panelItems: quoteData.selectedProduct?.panelItems || quoteData.panelItems || [],
+      discount: quoteData.calculations?.discount || quoteData.discount || discount,
       // Pass frontend calculations directly, with fallback to computed values
       calculations: {
         ...quoteData.calculations,
+        originalBasePrice: quoteData.calculations?.originalBasePrice,
         basePrice: quoteData.calculations?.subtotal || quoteData.calculations?.basePrice || subtotal,
         extraCosts: quoteData.calculations?.extraCosts || 0,
         gstAmount: quoteData.calculations?.gstAmount || gstAmount,
-        total: quoteData.calculations?.total || quoteData.calculations?.grandTotal || grandTotal,
-        grandTotal: quoteData.calculations?.grandTotal || grandTotal,
+        total: quoteData.calculations?.total || total,
+        discount: quoteData.calculations?.discount || quoteData.discount || discount,
+        grandTotal: quoteData.calculations?.grandTotal || quoteData.calculations?.payableAmount || grandTotal,
         centralSubsidy: quoteData.calculations?.centralSubsidy ?? 0,
         stateSubsidy: quoteData.calculations?.stateSubsidy ?? 0,
         effectiveCost: quoteData.calculations?.effectiveCost || 0
@@ -114,19 +153,35 @@ export async function POST(request: Request) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const puppeteerCore = require('puppeteer-core');
 
+      // Use Docker's system Chromium if provided via PUPPETEER_EXECUTABLE_PATH, else fetch/extract Chromium pack
+      const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH ||
+        await chromium.executablePath('https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar');
+
       browser = await puppeteerCore.launch({
         args: chromium.args,
         defaultViewport: chromium.defaultViewport,
-        executablePath: await chromium.executablePath('https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar'),
+        executablePath,
         headless: chromium.headless,
       });
     } else {
       const { default: puppeteer } = await import('puppeteer');
-      browser = await puppeteer.launch({
+      const customPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      const launchOptions: any = {
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      });
+      };
+
+      if (customPath) {
+        launchOptions.executablePath = customPath;
+      } else if (process.platform === 'darwin') {
+        const fs = await import('fs');
+        const defaultMacPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+        if (fs.existsSync(defaultMacPath)) {
+          launchOptions.executablePath = defaultMacPath;
+        }
+      }
+
+      browser = await puppeteer.launch(launchOptions);
     }
     let pdfBuffer: Buffer | Uint8Array;
     try {
@@ -136,17 +191,19 @@ export async function POST(request: Request) {
       pdfBuffer = await page.pdf({
         format: 'A4',
         printBackground: true,
-        margin: { top: '10mm', right: '10mm', bottom: '12mm', left: '10mm' }
+        preferCSSPageSize: true,
+        margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' }
       });
     } finally {
       try { await browser.close(); } catch { }
     }
 
-    const fileName = `quotation-${quoteData.customerInfo.name.replace(/\s+/g, '-')}-${Date.now()}.pdf`;
-    const bucketName = process.env.SUPABASE_BUCKET!;
+    const safeCustomerName = (quoteData.customerInfo.name || 'Customer').replace(/[^a-zA-Z0-9_-]/g, '-');
+    const fileName = `quotation-${safeCustomerName}-${Date.now()}.pdf`;
+    const bucketName = process.env.SUPABASE_BUCKET || 'quotes';
 
-    // Create Supabase client now that envs are validated
-    const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_KEY!);
+    // Create Supabase server client
+    const supabase = getServerSupabase();
 
     const { error: uploadError } = await supabase.storage.from(bucketName).upload(fileName, pdfBuffer, { contentType: 'application/pdf', upsert: false });
     if (uploadError) throw uploadError;
@@ -203,14 +260,24 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const missingEnv: string[] = [];
-    if (!process.env.SUPABASE_URL) missingEnv.push('SUPABASE_URL');
-    if (!process.env.SUPABASE_KEY) missingEnv.push('SUPABASE_KEY');
-    if (!process.env.SUPABASE_BUCKET) missingEnv.push('SUPABASE_BUCKET');
-    if (!process.env.DOUBLETICK_API_KEY) missingEnv.push('DOUBLETICK_API_KEY');
-    if (!process.env.DOUBLETICK_SENDER_PHONE) missingEnv.push('DOUBLETICK_SENDER_PHONE');
-    const ok = missingEnv.length === 0;
-    return NextResponse.json({ ok, missingEnv });
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_KEY;
+    const bucket = process.env.SUPABASE_BUCKET || 'quotes';
+
+    const missingRequired: string[] = [];
+    if (!supabaseUrl) missingRequired.push('SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL)');
+    if (!supabaseKey) missingRequired.push('SUPABASE_KEY (or SUPABASE_SERVICE_ROLE_KEY)');
+
+    const optionalIntegrations = {
+      supabaseBucket: bucket,
+      doubleTickApiKeyConfigured: !!process.env.DOUBLETICK_API_KEY,
+      doubleTickSenderPhoneConfigured: !!process.env.DOUBLETICK_SENDER_PHONE,
+      smtpConfigured: !!(process.env.SMTP_HOST && process.env.SMTP_USER),
+      customPuppeteerPath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+    };
+
+    const ok = missingRequired.length === 0;
+    return NextResponse.json({ ok, missingRequired, optionalIntegrations });
   } catch (e: unknown) {
     return NextResponse.json({ ok: false, message: (e as Error)?.message || 'Health check failed' }, { status: 500 });
   }

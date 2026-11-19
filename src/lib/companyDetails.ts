@@ -4,6 +4,7 @@ export const companies = [
         id: "arpit",
         name: "Arpit Solar Shop",
         tagline: "ILLUMINATING YOUR FUTURE WITH CLEAN ENERGY",
+        quotePrefix: "ASS",
         gstin: "09APKPM6299L1ZW",
         // Addresses
         headOffice: "Sh16/114/25-K-2, Sharvodaya Nagar, Kadipur Shivpur, Varanasi 221003",
@@ -21,39 +22,13 @@ export const companies = [
             ifsc: "HDFC0004807",
             upiId: "vyapar.173575988777@hdfcbank",
         },
-        // Logo
-        logo: "/logo.png",
-        signature: "/signature.png",
+        // Brand Assets synced with Supabase Storage
+        logo: "https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-logo.png",
+        signature: "https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-signature.png",
+        stamp: "https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-signature.png",
+        paymentQr: "https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-payment-qr.png",
         // Authorized Signatory
         authorizedSignatory: "Ratnesh Mishra",
-    },
-    {
-        id: "krishnanuja",
-        name: "KRISHNANUJA RENEWABLES PRIVATE LIMITED",
-        tagline: "SOLAR EPC SERVICES",
-        gstin: "09AAMCK6259J1ZU",
-        cin: "U35105UP2026PTC244522",
-        // Addresses
-        headOffice: "SH16/114-15-K2, SHARVODAYA NAGAR, KADIPUR, SHIVPUR, VARANASI 221003",
-        warehouse: "SH15/243, BHARLAI, SHIVPUR, VARANASI 221003",
-        // Contact
-        phone: "9044555572",
-        alternatePhone: "",
-        email: "",
-        // Bank Details
-        bank: {
-            name: "State Bank of India",
-            branch: "Phulwariya, Varanasi",
-            accountName: "Krishnanuja Renewables Private Limited",
-            accountNumber: "45174224440",
-            ifsc: "SBIN0064799",
-            upiId: "", // No UPI available yet
-        },
-        // Logo
-        logo: "/krishnanuja.png",
-        signature: "/Rahul_Sign.png",
-        // Authorized Signatory
-        authorizedSignatory: "Rahul Mishra",
     }
 ];
 
@@ -70,6 +45,9 @@ export const defaultSubsidy = {
 // ≤ 2 KW (including decimals like 1.5 KW): Central = ₹60,000, State = ₹30,000
 // ≥ 3 KW: Central = ₹78,000, State = ₹30,000
 export const getSubsidyForCapacity = (capacityKw: number): { central: number; state: number } => {
+    if (capacityKw <= 0) {
+        return { central: 0, state: 0 };
+    }
     if (capacityKw < 3) {
         return { central: 60000, state: 30000 };
     }
@@ -86,6 +64,19 @@ export const gstConfig = {
 };
 
 // Calculation: Effective GST = (70% × 5%) + (30% × 18%) = 3.5% + 5.4% = 8.9%
+
+// Helper to safely resolve image URLs (handles full Supabase storage HTTPS, data URIs, or local relative paths)
+export function resolveImageUrl(url: string | null | undefined, origin?: string): string {
+    if (!url || typeof url !== 'string' || !url.trim()) return '';
+    const trimmed = url.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+        return trimmed;
+    }
+    if (trimmed.startsWith('/')) {
+        return origin ? `${origin}${trimmed}` : trimmed;
+    }
+    return trimmed;
+}
 
 // Quote Number Prefix
 export const quoteNumberPrefix = "ASS"; // Arpit Solar Shop
@@ -235,7 +226,7 @@ export const defaultServiceTerms: string[] = [
 ];
 
 // Generate Service Proposal Reference Number
-export const generateServiceRefNumber = (prefix: string = 'KRPL'): string => {
+export const generateServiceRefNumber = (prefix: string = 'ASS'): string => {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');

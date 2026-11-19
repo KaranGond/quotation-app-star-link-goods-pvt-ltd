@@ -1,126 +1,473 @@
-// src/lib/quoteTemplate.ts - Professional quotation PDF template matching live preview
+// src/lib/quoteTemplate.ts - Professional quotation PDF template strictly formatted for 1-Page A4 output with well-balanced, readable proportions
 
 import { companyDetails as defaultCompanyDetails } from './companyDetails';
 
 export const generateQuoteHtml = (data: any): string => {
-  const { customerInfo, selectedProduct, calculations, components = [], terms = [], logoUrl, qrCodeUrl, upiLink } = data;
+  const {
+    customerInfo,
+    selectedProduct,
+    calculations,
+    components = [],
+    terms = [],
+    logoUrl,
+    signatureUrl,
+    stampUrl,
+    qrCodeUrl,
+    upiLink,
+    panelWarranty = "25 Years",
+    inverterWarranty = "5 Years",
+    showInverterWarranty = true,
+    batteryWarranty = "5 Years",
+  } = data;
   const company = data.companyDetails || defaultCompanyDetails;
 
-  // Safe number extraction
+  // Safe number extraction & formatting
   const n = (v: any) => (typeof v === 'number' && isFinite(v) ? v : 0);
   const basePrice = n(calculations?.basePrice) || n(calculations?.subtotal);
   const extraCosts = n(calculations?.extraCosts);
+  const originalBasePrice = n(calculations?.originalBasePrice) || (basePrice - extraCosts);
   const gstAmount = n(calculations?.gstAmount);
   const total = n(calculations?.total) || n(calculations?.grandTotal);
+  const discount = n(calculations?.discount) || n(data?.discount);
+  const netPayable = Math.max(0, +(total - discount).toFixed(2));
   const centralSubsidy = n(calculations?.centralSubsidy);
   const stateSubsidy = n(calculations?.stateSubsidy);
-  const effectiveCost = n(calculations?.effectiveCost);
+  const totalSubsidy = centralSubsidy + stateSubsidy;
+  const effectiveCost = n(calculations?.effectiveCost) || Math.max(0, +(netPayable - totalSubsidy).toFixed(2));
   const gstRate = n(data?.taxRate) * 100 || 8.9;
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('en-IN').format(Math.round(val));
+  const annualUnits = n(data.savings?.annualUnits);
+  const annualSavings = n(data.savings?.annualSavings);
+  const roiYears = n(data.savings?.roiYears);
+
+  const formatCurrency = (val: number) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.round(val));
   const currentDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const quoteNumber = `ASS-${(customerInfo?.name || 'X').charAt(0).toUpperCase()}${Date.now().toString().slice(-6)}`;
 
-  // System info
+  // System specs
   const systemSize = selectedProduct?.capacity || 0;
   const phase = selectedProduct?.phase === 1 ? 'Single Phase' : 'Three Phase';
-  const panelBrand = selectedProduct?.panelBrand || '';
-  const panelWattage = selectedProduct?.panelWattage || '';
-  const panelType = selectedProduct?.panelType || '';
-  const inverterBrand = selectedProduct?.inverterBrand || '';
+  const panelBrand = selectedProduct?.panelBrand || 'Adani';
+  const panelWattage = selectedProduct?.panelWattage ? `${selectedProduct.panelWattage}Wp` : '';
+  const panelType = selectedProduct?.panelType || 'Monoperc TopCon';
+  const inverterBrand = selectedProduct?.inverterBrand || 'Polycab';
+  const rawInverterWarranty = selectedProduct?.inverterWarranty || inverterWarranty || "5 Years";
+  const isShowInverterWarranty = selectedProduct?.showInverterWarranty !== undefined
+    ? Boolean(selectedProduct.showInverterWarranty)
+    : (data?.showInverterWarranty !== undefined ? Boolean(data.showInverterWarranty) : (showInverterWarranty && rawInverterWarranty !== 'None'));
+  const isShowRatePerWatt = selectedProduct?.showRatePerWatt !== undefined
+    ? Boolean(selectedProduct.showRatePerWatt)
+    : (data?.showRatePerWatt !== undefined ? Boolean(data.showRatePerWatt) : true);
   const systemType = selectedProduct?.systemType || 'On-grid';
+  const isB2B = systemType.includes('B2B') || systemType.includes('Structure');
+
+  // Support multi-panel or single-panel descriptions
+  const panelItems: any[] = selectedProduct?.panelItems || data?.panelItems || [];
+  const hasMultiplePanels = Array.isArray(panelItems) && panelItems.length > 1;
+  const modulesSummary = hasMultiplePanels
+    ? panelItems.map((p: any) => {
+        let rateInfo = '';
+        if (isShowRatePerWatt) {
+          rateInfo = p.ratePerWatt ? ` @ ₹${p.ratePerWatt}/Wp` : (p.ratePerPanel ? ` @ ₹${p.ratePerPanel}/pc` : '');
+        }
+        return `${(p.brand === 'Other' && p.customBrand) ? p.customBrand : p.brand} ${p.wattage}Wp (${p.quantity} Nos${rateInfo})`;
+      }).join(', ')
+    : `${panelBrand} ${panelWattage} (${panelType})${isShowRatePerWatt ? (panelItems[0]?.ratePerWatt ? ` @ ₹${panelItems[0].ratePerWatt}/Wp` : (panelItems[0]?.ratePerPanel ? ` @ ₹${panelItems[0].ratePerPanel}/pc` : '')) : ''}`;
+
+  // Unified official rubber stamp seal with signature
+  const sealAndSignature = signatureUrl || stampUrl;
+
+  const defaultTermsList = [
+    'Payment: 10% Advance on structure installation. 85% Before delivery of kit. 5% Post installation.',
+    'Subsidy: Subsidy directly credited to customer bank account post Discom inspection.',
+    'Net Metering: Assistance in Net Metering paperwork and Discom net meter installation.',
+    'Delivery & Install: Delivery within 3-4 weeks. Installation within 45 days of order confirmation.',
+    'Warranty: Solar Modules 25 Years, Inverter 5 Years. External damages not covered.',
+    'Consumer Scope: Structure elevation civil material, ladder access & water point on terrace.',
+  ];
+  const effectiveTerms = (terms && terms.length > 0) ? terms : defaultTermsList;
 
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #333; background: white; }
-    .page { width: 210mm; min-height: 297mm; padding: 15mm; margin: 0 auto; }
+    @page {
+      size: A4 portrait;
+      margin: 10mm 10mm 10mm 10mm;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body, html {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      font-family: 'Segoe UI', Arial, -apple-system, sans-serif;
+      color: #1e293b;
+      font-size: 9.5px;
+      line-height: 1.35;
+      width: 100%;
+    }
+    .page {
+      width: 100%;
+      max-width: 100%;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
     
     /* Header */
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #1e3a5f; }
-    .logo-section { display: flex; align-items: center; gap: 12px; }
-    .logo { width: 60px; height: 60px; object-fit: contain; }
-    .company-name { font-size: 24px; font-weight: 900; color: #1e3a5f; letter-spacing: -0.5px; }
-    .company-tagline { font-size: 9px; font-weight: 600; color: #64748b; margin-top: 4px; letter-spacing: 1px; text-transform: uppercase; }
-    .company-info { font-size: 9px; color: #64748b; margin-top: 8px; line-height: 1.6; }
-    .gstin { color: #1d4ed8; font-weight: 700; }
-    
-    .quote-badge { background: #eab308; color: white; padding: 8px 20px; font-size: 16px; font-weight: 900; border-radius: 4px; text-transform: uppercase; letter-spacing: 2px; }
-    .quote-info { text-align: right; margin-top: 8px; font-size: 11px; color: #64748b; }
-    .quote-number { font-size: 9px; color: #94a3b8; }
-    
-    /* Grid Layouts */
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-    
-    /* Info Boxes */
-    .info-box { background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0; }
-    .info-title { font-weight: 700; color: #1e3a5f; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 10px; }
-    .customer-name { font-weight: 900; color: #1e40af; font-size: 15px; margin-bottom: 4px; }
-    .customer-detail { color: #475569; font-size: 10px; margin-bottom: 2px; }
-    .system-row { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 3px; }
-    .system-row strong { color: #1e293b; }
-    
-    /* Components Table */
-    .table-container { border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; margin-bottom: 16px; }
-    table { width: 100%; border-collapse: collapse; font-size: 10px; }
-    th { background: #f1f5f9; color: #1e3a5f; font-weight: 700; padding: 10px 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-    th:first-child { width: 40px; text-align: center; }
-    th:last-child { text-align: right; width: 70px; }
-    td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; }
-    tr:nth-child(even) { background: #f8fafc; }
-    tr:last-child td { border-bottom: none; }
-    .td-center { text-align: center; }
-    .td-right { text-align: right; font-weight: 700; }
-    .highlight-row td { font-weight: 700; color: #1e293b; }
-    .highlight-row td:nth-child(3) { color: #1e40af; font-style: italic; }
-    .highlight-row td:last-child { color: #1e40af; }
-    
-    /* Subsidy Box */
-    .subsidy-box { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 14px; border-radius: 8px; margin-bottom: 12px; }
-    .subsidy-title { font-weight: 900; color: #166534; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
-    .subsidy-row { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; border-bottom: 1px solid #bbf7d0; }
-    .subsidy-total { display: flex; justify-content: space-between; font-size: 13px; font-weight: 900; color: #166534; padding-top: 10px; text-transform: uppercase; }
-    .subsidy-total span:last-child { font-size: 17px; }
-    
-    /* Bank Details */
-    .bank-box { background: #eff6ff; border: 1px solid #bfdbfe; padding: 14px; border-radius: 8px; font-size: 9px; }
-    .bank-title { font-weight: 900; color: #1e3a5f; text-transform: uppercase; border-bottom: 1px solid #bfdbfe; padding-bottom: 6px; margin-bottom: 8px; }
-    .bank-row { margin: 3px 0; }
-    
-    /* Investment Summary */
-    .investment-box { background: #f8fafc; border: 1px solid #bfdbfe; padding: 16px; border-radius: 8px; }
-    .investment-title { font-weight: 700; color: #1e3a5f; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #bfdbfe; padding-bottom: 6px; margin-bottom: 12px; }
-    .price-row { display: flex; justify-content: space-between; font-size: 10px; padding: 3px 0; color: #64748b; }
-    .price-row.extra { color: #d97706; }
-    .price-row.border { border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 6px; }
-    .total-row { display: flex; justify-content: space-between; font-size: 15px; font-weight: 900; color: #1e3a5f; padding-top: 8px; }
-    .total-row span:last-child { color: #1e40af; }
-    
-    .effective-box { background: #dbeafe; border: 1px solid #93c5fd; border-radius: 8px; padding: 14px; text-align: center; margin-top: 14px; }
-    .effective-label { font-size: 8px; color: #1e40af; text-transform: uppercase; font-weight: 900; letter-spacing: 1px; margin-bottom: 4px; }
-    .effective-value { font-size: 22px; font-weight: 900; color: #16a34a; letter-spacing: -1px; }
-    
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 3px solid ${isB2B ? '#d97706' : '#eab308'};
+      padding-bottom: 8px;
+      margin-bottom: 8px;
+    }
+    .logo-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo {
+      max-height: 52px;
+      max-width: 135px;
+      object-fit: contain;
+    }
+    .company-name {
+      font-size: 18px;
+      font-weight: 900;
+      color: #1e3a5f;
+      letter-spacing: -0.3px;
+      line-height: 1.1;
+      text-transform: uppercase;
+    }
+    .company-tagline {
+      font-size: 8.5px;
+      font-weight: 700;
+      color: #64748b;
+      margin-top: 2px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    .company-info {
+      font-size: 8px;
+      color: #64748b;
+      margin-top: 3px;
+      line-height: 1.4;
+    }
+    .gstin {
+      color: #1d4ed8;
+      font-weight: 700;
+    }
+    .quote-badge-box {
+      text-align: right;
+    }
+    .quote-badge {
+      background: ${isB2B ? '#d97706' : '#eab308'};
+      color: white;
+      padding: 4px 14px;
+      font-size: 11px;
+      font-weight: 900;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      display: inline-block;
+      margin-bottom: 4px;
+    }
+    .quote-info {
+      font-size: 9px;
+      color: #64748b;
+      line-height: 1.35;
+    }
+    .quote-number {
+      font-size: 8px;
+      color: #94a3b8;
+    }
+
+    /* 2 Column Customer & System Specs Layout */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 5px;
+      padding: 8px 10px;
+    }
+    .card-title {
+      font-size: 8.5px;
+      font-weight: 800;
+      color: #1e3a5f;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 3px;
+      margin-bottom: 5px;
+    }
+    .customer-name {
+      font-size: 13px;
+      font-weight: 900;
+      color: #1e40af;
+      margin-bottom: 2px;
+    }
+    .customer-detail {
+      font-size: 8.5px;
+      color: #475569;
+      margin-top: 1px;
+    }
+    .spec-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 8.5px;
+      margin-bottom: 2.5px;
+      color: #475569;
+    }
+    .spec-row strong {
+      color: #0f172a;
+    }
+
+    /* BOM Table */
+    .section-heading {
+      font-size: 9.5px;
+      font-weight: 900;
+      color: #1e3a5f;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 4px;
+      display: inline-block;
+      border-bottom: 2px solid ${isB2B ? '#d97706' : '#eab308'};
+      padding-bottom: 2px;
+    }
+    .table-container {
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8.5px;
+    }
+    th {
+      background: #f1f5f9;
+      color: #1e3a5f;
+      font-weight: 800;
+      padding: 5px 8px;
+      text-align: left;
+      border-bottom: 1.5px solid #cbd5e1;
+      text-transform: uppercase;
+      font-size: 8px;
+      letter-spacing: 0.5px;
+    }
+    td {
+      padding: 4.5px 8px;
+      border-bottom: 1px solid #e2e8f0;
+      vertical-align: middle;
+      color: #334155;
+    }
+    tr:nth-child(even) {
+      background: #f8fafc;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    .td-center {
+      text-align: center;
+    }
+    .td-right {
+      text-align: right;
+    }
+
+    /* Metrics Grid */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 4px;
+      margin-bottom: 6px;
+      text-align: center;
+    }
+    .metric-badge {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 4px;
+    }
+    .metric-label {
+      font-size: 7.5px;
+      color: #64748b;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .metric-val {
+      font-size: 10.5px;
+      font-weight: 900;
+      color: #0f172a;
+      margin-top: 1px;
+    }
+
+    /* Bank & QR Box */
+    .bank-box {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 5px;
+      padding: 6px 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .bank-details {
+      font-size: 8px;
+      color: #334155;
+      line-height: 1.45;
+    }
+    .qr-box {
+      text-align: center;
+      flex-shrink: 0;
+      margin-left: 8px;
+    }
+    .qr-img {
+      width: 50px;
+      height: 50px;
+      object-fit: contain;
+      mix-blend-mode: multiply;
+      display: block;
+    }
+
+    /* Price Summary & Subsidy Box */
+    .price-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 8.5px;
+      color: #475569;
+      margin-bottom: 2.5px;
+    }
+    .total-amount-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11.5px;
+      font-weight: 900;
+      color: #1e3a5f;
+      border-top: 1.5px solid #e2e8f0;
+      padding-top: 4px;
+      margin-top: 3px;
+    }
+    .subsidy-benefit-box {
+      margin-top: 6px;
+      padding: 5px 8px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 4px;
+    }
+    .subsidy-breakdown {
+      display: flex;
+      justify-content: space-between;
+      font-size: 8px;
+      color: #166534;
+      font-weight: 600;
+    }
+    .effective-cost-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 3px;
+      padding-top: 3px;
+      border-top: 1px dashed #bbf7d0;
+    }
+    .effective-cost-val {
+      font-size: 15px;
+      font-weight: 900;
+      color: #16a34a;
+    }
+
     /* Terms */
-    .terms-section { border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 16px; }
-    .terms-title { font-weight: 900; color: #1e293b; text-transform: uppercase; font-size: 9px; letter-spacing: 1px; margin-bottom: 10px; }
-    .terms-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 24px; }
-    .term-item { font-size: 9px; color: #64748b; padding-left: 12px; position: relative; line-height: 1.5; }
-    .term-item::before { content: "•"; position: absolute; left: 0; color: #94a3b8; }
-    
+    .terms-section {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 6px;
+      margin-bottom: 8px;
+    }
+    .terms-title {
+      font-size: 8.5px;
+      font-weight: 900;
+      color: #1e293b;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 4px;
+    }
+    .terms-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2.5px 18px;
+      font-size: 7.8px;
+      color: #64748b;
+      padding-left: 10px;
+    }
+    .term-item {
+      line-height: 1.35;
+      position: relative;
+    }
+    .term-item strong {
+      color: #334155;
+    }
+
     /* Signature */
-    .signature-section { display: flex; justify-content: space-between; margin-top: 40px; padding: 0 20px; }
-    .sig-box { text-align: center; }
-    .sig-box.right { text-align: right; }
-    .sig-line { width: 150px; height: 1px; background: #cbd5e1; margin: 0 auto 6px; }
-    .sig-box.right .sig-line { margin: 0 0 6px auto; }
-    .sig-label { font-size: 8px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
-    .for-company { font-size: 13px; font-weight: 900; color: #1e3a5f; margin-bottom: 40px; text-decoration: underline; text-decoration-color: #eab308; text-underline-offset: 4px; }
-    
-    @page { size: A4; margin: 0; }
-    @media print { .page { padding: 10mm; } }
+    .sig-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-top: 8px;
+      padding: 0 6px;
+    }
+    .sig-box {
+      text-align: center;
+    }
+    .sig-box.right {
+      text-align: right;
+    }
+    .sig-line {
+      width: 130px;
+      height: 1px;
+      background: #cbd5e1;
+      margin: 0 auto 3px;
+    }
+    .sig-box.right .sig-line {
+      margin: 0 0 3px auto;
+      width: 150px;
+    }
+    .sig-label {
+      font-size: 7.5px;
+      color: #94a3b8;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .for-company {
+      font-size: 10.5px;
+      font-weight: 900;
+      color: #1e3a5f;
+      margin-bottom: 2px;
+      text-decoration: underline;
+      text-decoration-color: ${isB2B ? '#d97706' : '#eab308'};
+      text-underline-offset: 3px;
+    }
+    .seal-img {
+      max-height: 46px;
+      max-width: 150px;
+      object-fit: contain;
+      margin-left: auto;
+      display: block;
+      margin-bottom: 2px;
+    }
   </style>
 </head>
 <body>
@@ -131,192 +478,204 @@ export const generateQuoteHtml = (data: any): string => {
         ${logoUrl ? `<img src="${logoUrl}" class="logo" alt="Logo" />` : ''}
         <div>
           <div class="company-name">${company.name.toUpperCase()}</div>
-          <div class="company-tagline">${company.tagline}</div>
+          <div class="company-tagline">${company.tagline || 'ILLUMINATING YOUR FUTURE WITH CLEAN ENERGY'}</div>
           <div class="company-info">
-            <div class="gstin">GSTIN: ${company.gstin}</div>
-            <div><strong>HO:</strong> ${company.headOffice}</div>
-            <div><strong>Contact:</strong> ${company.phone} | <strong>Email:</strong> ${company.email}</div>
+            <div><span class="gstin">GSTIN: ${company.gstin}</span>${company.cin ? ` | CIN: ${company.cin}` : ''}</div>
+            <div><strong>HO:</strong> ${company.headOffice || company.head_office || ''}</div>
+            <div>📞 ${company.phone || ''} | ✉️ ${company.email || ''}</div>
           </div>
         </div>
       </div>
-      <div>
-        <div class="quote-badge">Quotation</div>
+      <div class="quote-badge-box">
+        <div class="quote-badge">${isB2B ? 'Commercial Quotation' : 'Solar Quotation'}</div>
         <div class="quote-info">
-          <strong>Date:</strong> ${currentDate}
+          <div><strong>Date:</strong> ${currentDate}</div>
           <div class="quote-number">Quote No: ${quoteNumber}</div>
         </div>
       </div>
     </div>
     
-    <!-- Customer & System Overview -->
+    <!-- Customer Details & System Overview -->
     <div class="grid-2">
-      <div class="info-box">
-        <div class="info-title">Customer Details</div>
-        <div class="customer-name">${customerInfo?.name || '________________'}</div>
-        ${customerInfo?.address ? `<div class="customer-detail" style="font-style: italic;">${customerInfo.address}</div>` : ''}
-        ${customerInfo?.phone ? `<div class="customer-detail">Mo No: ${customerInfo.phone}</div>` : ''}
+      <div class="card">
+        <div class="card-title">Customer Details</div>
+        <div class="customer-name">${customerInfo?.name || 'Valued Customer'}</div>
+        ${customerInfo?.address ? `<div class="customer-detail">📍 ${customerInfo.address}</div>` : ''}
+        ${customerInfo?.phone ? `<div class="customer-detail">📞 +91 ${customerInfo.phone}</div>` : ''}
+        ${customerInfo?.gstin ? `<div class="customer-detail" style="color: #1d4ed8; font-weight: 700;">GSTIN: ${customerInfo.gstin}</div>` : ''}
       </div>
-      <div class="info-box">
-        <div class="info-title">System Overview</div>
-        <div class="system-row"><span>System Size:</span> <strong>${systemSize} KW (${phase})</strong></div>
-        <div class="system-row"><span>Modules:</span> <strong>${panelBrand} ${panelWattage}Wp (${panelType})</strong></div>
-        <div class="system-row" style="color: #475569;"><span>Module Warranty:</span> <strong>${data.panelWarranty}</strong></div>
-        <div class="system-row"><span>Inverter:</span> <strong>${inverterBrand}</strong></div>
-        <div class="system-row" style="color: #475569;"><span>Inverter Warranty:</span> <strong>${data.inverterWarranty}</strong></div>
-        ${(systemType === 'Hybrid' || systemType === 'Off-grid') ? `<div class="system-row" style="color: #475569;"><span>Battery Warranty:</span> <strong>${data.batteryWarranty}</strong></div>` : ''}
-        <div class="system-row"><span>Type:</span> <strong>${systemType}</strong></div>
+      <div class="card">
+        <div class="card-title">System Specifications</div>
+        ${!isB2B ? `
+          <div class="spec-row"><span>System Size:</span> <strong>${systemSize} KW (${phase})</strong></div>
+          <div class="spec-row"><span>Modules:</span> <strong style="text-align: right; max-width: 68%;">${modulesSummary}</strong></div>
+          <div class="spec-row"><span>Module Warranty:</span> <strong>${panelWarranty}</strong></div>
+          <div class="spec-row"><span>Inverter:</span> <strong>${inverterBrand}</strong></div>
+          ${(isShowInverterWarranty && rawInverterWarranty && rawInverterWarranty !== 'None') ? `<div class="spec-row"><span>Inverter Warranty:</span> <strong>${rawInverterWarranty}</strong></div>` : ''}
+          ${(systemType === 'Hybrid' || systemType === 'Off-grid') ? `<div class="spec-row"><span>Battery Warranty:</span> <strong>${batteryWarranty}</strong></div>` : ''}
+          <div class="spec-row"><span>System Type:</span> <strong>${systemType}</strong></div>
+        ` : `
+          <div class="spec-row"><span>Proposal Title:</span> <strong>${data.b2bProposalTitle || 'B2B SOLAR MOUNTING STRUCTURE'}</strong></div>
+          <div class="spec-row"><span>Structure Make:</span> <strong>${panelBrand}</strong></div>
+          <div class="spec-row"><span>Material Grade:</span> <strong>Pre-Galvanized / Hot Dip 80+ Micron</strong></div>
+          <div class="spec-row"><span>Warranty:</span> <strong>25 Years Structural Stability</strong></div>
+          <div class="spec-row"><span>Scope:</span> <strong>Supply & Fabrication BOS Kit</strong></div>
+        `}
       </div>
     </div>
     
     <!-- Components Table -->
+    <div>
+      <div class="section-heading">Technical Bill of Materials (BOM)</div>
+    </div>
     <div class="table-container">
       <table>
         <thead>
           <tr>
-            <th style="width: 40px; text-align: center;">S.N</th>
+            <th style="width: 28px; text-align: center;">S.N</th>
             <th style="width: 25%;">Components</th>
-            <th>Description</th>
-            <th style="width: 10%; text-align: center;">Quantity</th>
-            <th style="width: 15%; text-align: center;">Make</th>
+            <th>Description & Specification</th>
+            <th style="width: 55px; text-align: center;">Quantity</th>
+            <th style="width: 80px; text-align: center;">Make</th>
           </tr>
         </thead>
         <tbody>
           ${components.map((comp: any, i: number) => `
-            <tr class="${i < 2 ? 'highlight-row' : ''}">
+            <tr style="${i < 2 ? 'font-weight: 700;' : ''}">
               <td class="td-center">${i + 1}</td>
-              <td style="font-weight: 700;">${comp.name || ''}</td>
-              <td>${comp.description || ''}</td>
-              <td class="td-center">${comp.quantity || ''}</td>
-              <td class="td-center" style="font-weight: 700; color: #1e40af;">${comp.make || ''}</td>
+              <td style="color: #0f172a;">${comp.name || ''}</td>
+              <td style="color: ${i < 2 ? '#0f172a' : '#475569'};">${comp.description || ''}</td>
+              <td class="td-center" style="font-weight: 700;">${comp.quantity || ''}</td>
+              <td class="td-center" style="color: #1e40af; font-weight: 700;">${comp.make || ''}</td>
             </tr>
           `).join('')}
         </tbody>
       </table>
     </div>
 
-
-    <!-- Pricing & Subsidy -->
-    <div class="grid-2" style="margin-bottom: 20px;">
-      <div>
-        ${(centralSubsidy + stateSubsidy) > 0 ? `
-        <div class="subsidy-box">
-          <div class="info-title" style="color: #166534;">PM Surya Ghar Subsidy</div>
-          <div class="system-row" style="border-bottom: 1px solid #bbf7d0; justify-content: space-between;"><span>Central Subsidy:</span> <strong>₹ ${formatCurrency(centralSubsidy)}/-</strong></div>
-          <div class="system-row" style="border-bottom: 1px solid #bbf7d0; justify-content: space-between;"><span>State Subsidy:</span> <strong>₹ ${formatCurrency(stateSubsidy)}/-</strong></div>
-          <div class="system-row" style="color: #166534; font-size: 14px; margin-top: 4px; border: none; justify-content: space-between;"><span>Total Benefit:</span> <span style="font-size: 16px; font-weight: 900;">₹ ${formatCurrency(centralSubsidy + stateSubsidy)}/-</span></div>
+    <!-- Financials & Bank Details Grid -->
+    <div class="grid-2">
+      <!-- Left Column: Metrics & Bank Account -->
+      <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+        ${annualUnits > 0 ? `
+        <div>
+          <div class="card-title">Energy Generation & Financial Returns</div>
+          <div class="metrics-row">
+            <div class="metric-badge">
+              <div class="metric-label">Generation</div>
+              <div class="metric-val">${annualUnits} U/Yr</div>
+            </div>
+            <div class="metric-badge">
+              <div class="metric-label">Annual Savings</div>
+              <div class="metric-val" style="color: #16a34a;">₹ ${formatCurrency(annualSavings)}</div>
+            </div>
+            <div class="metric-badge">
+              <div class="metric-label">Payback (ROI)</div>
+              <div class="metric-val" style="color: #ea580c;">${roiYears} Yrs</div>
+            </div>
+          </div>
         </div>
         ` : ''}
-        
-        <div class="bank-box" style="margin-top: 15px;">
-          <div class="info-title">Bank Details</div>
-          <p style="margin: 4px 0;"><strong>A/c Name:</strong> ${company.bank.accountName}</p>
-          <p style="margin: 4px 0;"><strong>A/c No:</strong> ${company.bank.accountNumber} | <strong>IFSC:</strong> ${company.bank.ifsc}</p>
-          <p style="margin: 4px 0;"><strong>Bank:</strong> ${company.bank.name}, ${company.bank.branch}</p>
-          
+
+        <div class="bank-box">
+          <div class="bank-details">
+            <div style="font-weight: 800; color: #1e3a5f; text-transform: uppercase; font-size: 8px; margin-bottom: 2px;">Bank & Payment Details</div>
+            <div><strong>A/c Name:</strong> ${company.bank?.accountName || company.name}</div>
+            <div><strong>Bank:</strong> ${company.bank?.name || ''}${company.bank?.branch ? `, ${company.bank.branch}` : ''}</div>
+            <div><strong>A/c No:</strong> ${company.bank?.accountNumber || ''} | <strong>IFSC:</strong> ${company.bank?.ifsc || ''}</div>
+            ${company.bank?.upiId ? `<div style="color: #1d4ed8; font-weight: 700;"><strong>UPI:</strong> ${company.bank.upiId}</div>` : ''}
+          </div>
           ${qrCodeUrl ? `
-          <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed #cbd5e1; text-align: center;">
-              <div style="font-weight: 700; color: #1e3a5f; margin-bottom: 4px;">Scan to Pay</div>
-              <a href="${upiLink}" style="text-decoration: none;">
-                  <img src="${qrCodeUrl}" alt="Payment QR" style="width: 80px; height: 80px; mix-blend-mode: multiply;" />
-              </a>
-              <div style="font-size: 8px; color: #64748b; margin-top: 2px;">Click or Scan with UPI App</div>
+          <div class="qr-box">
+            <a href="${upiLink || '#'}" style="text-decoration: none;">
+              <img src="${qrCodeUrl}" class="qr-img" alt="Payment QR" />
+            </a>
+            <div style="font-size: 7px; color: #64748b; font-weight: 700; margin-top: 1px;">Scan UPI</div>
           </div>
           ` : ''}
         </div>
       </div>
       
-      <div class="investment-box">
-        <div class="info-title">Investment Summary</div>
-        <div class="system-row" style="justify-content: space-between;"><span>Base Price:</span> <span>₹ ${formatCurrency(basePrice - extraCosts)}</span></div>
-        ${extraCosts > 0 ? `<div class="system-row" style="color: #d97706; justify-content: space-between;"><span>+ Extra Costs:</span> <span>₹ ${formatCurrency(extraCosts)}</span></div>` : ''}
-        <div class="system-row" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 5px; justify-content: space-between;"><span>GST (@ ${gstRate}%):</span> <span>₹ ${formatCurrency(gstAmount)}</span></div>
-        <div class="system-row" style="font-size: 16px; font-weight: 900; color: #1e3a5f; padding-top: 5px; justify-content: space-between;"><span style="font-size: 11px; text-transform: uppercase;">Total Amount:</span> <span style="color: #1e40af;">₹ ${formatCurrency(total)}</span></div>
-        <div class="effective-box" style="margin-top: 10px; padding: 10px; background-color: #dbeafe; border: 1px solid #93c5fd; border-radius: 6px; text-align: center;">
-          <div class="effective-label" style="font-size: 9px; color: #1e40af; text-transform: uppercase; font-weight: 900; letter-spacing: 1px; margin-bottom: 4px;">${(centralSubsidy + stateSubsidy) > 0 ? 'Effective Cost After Subsidy' : 'Effective Cost'}</div>
-          <div class="effective-value" style="font-size: 24px; font-weight: 900; color: #16a34a; letter-spacing: -1px;">₹ ${formatCurrency(effectiveCost)}*</div>
+      <!-- Right Column: Investment Summary & Subsidy Benefit -->
+      <div class="card" style="border-color: #bfdbfe; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div class="card-title" style="border-color: #bfdbfe;">Investment & Pricing Summary</div>
+          <div class="price-row">
+            <span>Base System Price:</span>
+            <span>₹ ${formatCurrency(originalBasePrice)}</span>
+          </div>
+          ${extraCosts > 0 ? `
+          <div class="price-row" style="color: #d97706;">
+            <span>+ Extra Costs:</span>
+            <span>₹ ${formatCurrency(extraCosts)}</span>
+          </div>
+          ` : ''}
+          <div class="price-row">
+            <span>GST (@ ${gstRate}%):</span>
+            <span>₹ ${formatCurrency(gstAmount)}</span>
+          </div>
+          <div class="total-amount-row">
+            <span style="font-size: 9px; text-transform: uppercase;">Total Amount:</span>
+            <span style="color: #1e40af;">₹ ${formatCurrency(total)}</span>
+          </div>
+          ${discount > 0 ? `
+          <div class="price-row" style="color: #dc2626; font-weight: 700; margin-top: 2px;">
+            <span>- Special Discount:</span>
+            <span>- ₹ ${formatCurrency(discount)}</span>
+          </div>
+          <div class="total-amount-row" style="border-top: 1px dashed #86efac; color: #166534; padding-top: 2px; margin-top: 2px;">
+            <span style="font-size: 9px; text-transform: uppercase;">Final Payable:</span>
+            <span>₹ ${formatCurrency(netPayable)}</span>
+          </div>
+          ` : ''}
         </div>
+
+        ${totalSubsidy > 0 ? `
+        <div class="subsidy-benefit-box">
+          <div class="subsidy-breakdown">
+            <span>Central Subsidy: <strong>₹ ${formatCurrency(centralSubsidy)}</strong></span>
+            <span>State Subsidy: <strong>₹ ${formatCurrency(stateSubsidy)}</strong></span>
+          </div>
+          <div class="effective-cost-row">
+            <span style="font-size: 8.5px; color: #166534; font-weight: 900; text-transform: uppercase;">Effective Cost After Subsidy:</span>
+            <span class="effective-cost-val">₹ ${formatCurrency(effectiveCost)}*</span>
+          </div>
+        </div>
+        ` : `
+        <div style="margin-top: 5px; padding: 4px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; text-align: center;">
+          <div style="font-size: 7.5px; color: #1e40af; font-weight: 700; text-transform: uppercase;">Net Investment Payable</div>
+          <div style="font-size: 13px; font-weight: 900; color: #1e40af;">₹ ${formatCurrency(discount > 0 ? netPayable : total)}</div>
+        </div>
+        `}
       </div>
     </div>
 
-    <!-- Savings & Financial Breakdown Table -->
-    <div class="table-container" style="border: none; margin-bottom: 20px;">
-      <div class="info-title">Breakdown of Savings & Financials</div>
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 40px; text-align: center;">S.No</th>
-            <th>Content</th>
-            <th style="text-align: right;">Amount / Details</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td class="td-center">1</td>
-            <td>Proposed Solar Plant Size</td>
-            <td class="td-right">${systemSize} KW</td>
-          </tr>
-          <tr>
-            <td class="td-center">2</td>
-            <td>Annual Units Generation (approx.)</td>
-            <td class="td-right">${n(data.savings?.annualUnits) || 0} Units</td>
-          </tr>
-          <tr>
-            <td class="td-center">3</td>
-            <td>Average Grid Electricity Rate</td>
-            <td class="td-right">Rs. 6.5 / Unit</td>
-          </tr>
-          <tr>
-            <td class="td-center">4</td>
-            <td><strong>Annual Savings</strong></td>
-            <td class="td-right" style="color: #16a34a; font-size: 12px;">Rs. ${formatCurrency(n(data.savings?.annualSavings))}</td>
-          </tr>
-          <tr style="background-color: #f0fdf4;">
-            <td class="td-center">5</td>
-            <td><strong>Subsidy Applicable</strong><br><span style="font-size: 9px; color: #64748b;">(Central + State Government)</span></td>
-            <td class="td-right" style="color: #166534;">
-              <div>Central: ₹ ${formatCurrency(centralSubsidy)}</div>
-              <div>State: ₹ ${formatCurrency(stateSubsidy)}</div>
-              <div style="border-top: 1px solid #bbf7d0; margin-top: 4px; padding-top: 4px; font-size: 13px;">Total: ₹ ${formatCurrency(centralSubsidy + stateSubsidy)}</div>
-            </td>
-          </tr>
-          <tr>
-            <td class="td-center">6</td>
-            <td><strong>Return on Investment (ROI)</strong><br><span style="font-size: 9px; color: #64748b;">Net Cost / Annual Savings</span></td>
-            <td class="td-right">
-              <div>Net Cost: ₹ ${formatCurrency(effectiveCost)}</div>
-              <div style="font-size: 14px; color: #ea580c; margin-top: 4px;">${data.savings?.roiYears || 0} Years</div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    
-    <!-- Terms -->
+    <!-- Terms and Conditions -->
     <div class="terms-section">
       <div class="terms-title">Terms and Conditions</div>
       <div class="terms-grid">
-        ${(terms.length > 0 ? terms : [
-      'Payment: 10% Advance on structure installation.',
-      'Delivery: 85% Before delivery of kit. 5% Post installation.',
-      'Subsidy directly credited to customer bank account.',
-      'Installation completed within 7-10 working days.',
-      'Module Warranty: 25 Years. Inverter: 5 Years.',
-      'Free Annual Maintenance for 1st year.'
-    ]).map((term: string) => `<div class="term-item">${term.replace(/^([^:]+):/, '<strong>$1:</strong>')}</div>`).join('')}
+        ${effectiveTerms.map((term: string) => `
+          <div class="term-item">• ${term.replace(/^([^:]+):/, '<strong>$1:</strong>')}</div>
+        `).join('')}
       </div>
     </div>
     
-    <!-- Signature -->
-    <div class="signature-section">
+    <!-- Signatures -->
+    <div class="sig-section">
       <div class="sig-box">
+        <div style="font-size: 8px; font-weight: 700; color: #1e3a5f; margin-bottom: 2px;">Customer Acceptance</div>
+        <div style="height: 30px;"></div>
         <div class="sig-line"></div>
         <div class="sig-label">Customer Signature</div>
+        <div style="font-size: 8px; color: #475569; font-weight: 600;">${customerInfo?.name || 'Customer'}</div>
       </div>
       <div class="sig-box right">
         <div class="for-company">For ${company.name}</div>
-        ${data.signatureUrl ? `<img src="${data.signatureUrl}" style="height: 60px; object-fit: contain; margin-bottom: -10px; display: block; margin-left: auto;" alt="Signature" />` : '<div style="height: 50px;"></div>'}
+        ${sealAndSignature ? `
+          <img src="${sealAndSignature}" class="seal-img" alt="Official Seal & Signature" />
+        ` : '<div style="height: 46px;"></div>'}
         <div class="sig-line"></div>
-        <div class="sig-label">Authorized Signatory</div>
+        <div class="sig-label">${company.authorizedSignatory || company.authorized_signatory || 'Authorized Signatory'}</div>
       </div>
     </div>
   </div>

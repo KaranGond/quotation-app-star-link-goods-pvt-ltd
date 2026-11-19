@@ -50,12 +50,28 @@ import {
   Search as SearchIcon,
   Verified,
   Factory,
+  ContentCopy,
+  Launch,
+  Check,
+  Business,
+  Gavel,
+  Logout,
+  Shield,
+  Group,
 } from "@mui/icons-material";
+import { useSession, signOut } from "@/lib/auth-client";
+import { Can } from "@/components/Can";
+import {
+  buildQuoteWhatsAppMessage,
+  openWhatsAppDirect,
+  formatWhatsAppPhoneNumber,
+} from "@/lib/whatsappShare";
 import { useReactToPrint } from "react-to-print";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   companies,
+  resolveImageUrl,
   defaultTerms,
   defaultComponents,
   gstConfig,
@@ -105,6 +121,17 @@ const panelBrands = ["Adani", "Tata", "Waaree", "Reliance", "Premier", "Emvee", 
 // Inverter brands
 const inverterBrands = ["Polycab", "Shakti", "Growatt", "Sungrow", "Huawei", "Deye", "Servotech", "Luminous", "GoodWe", "Solis", "Solax", "Sofar Solar", "Other"];
 
+export type PanelConfigItem = {
+  id: string;
+  brand: string;
+  customBrand?: string;
+  wattage: number;
+  panelType: string;
+  quantity: number;
+  ratePerWatt?: number;
+  ratePerPanel?: number;
+};
+
 // Wrapper with Suspense for useSearchParams
 export default function QuotationBuilderPage() {
   return (
@@ -124,11 +151,100 @@ function QuotationBuilder() {
   const [editingQuotationId, setEditingQuotationId] = useState<string | null>(null);
   const [editLoaded, setEditLoaded] = useState(false);
 
-  // Company Selection
+  // Company Selection (Single Tenant with DB customizer)
   const [selectedCompanyId, setSelectedCompanyId] = useState(companies[0].id);
-  const activeCompany = useMemo(() => companies.find(c => c.id === selectedCompanyId) || companies[0], [selectedCompanyId]);
+  const [customCompany, setCustomCompany] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/api/company')
+      .then(res => res.json())
+      .then(json => {
+        if (json.success && json.data) {
+          const d = json.data;
+          setCustomCompany({
+            id: 'default',
+            name: d.name || 'Arpit Solar Shop',
+            tagline: d.tagline || '',
+            gstin: d.gstin || '',
+            cin: d.cin || '',
+            headOffice: d.head_office || '',
+            registeredOffice: d.registered_office || '',
+            warehouse: d.warehouse || '',
+            phone: d.phone || '',
+            alternatePhone: d.alternate_phone || '',
+            email: d.email || '',
+            bank: {
+              name: d.bank_name || '',
+              branch: d.bank_branch || '',
+              accountName: d.account_name || '',
+              accountNumber: d.account_number || '',
+              ifsc: d.ifsc || '',
+              upiId: d.upi_id || '',
+            },
+            logo: d.logo_url || companies[0].logo,
+            signature: d.signature_url || companies[0].signature,
+            stamp: d.stamp_url || companies[0].stamp,
+            stamp_url: d.stamp_url || companies[0].stamp,
+            signature_url: d.signature_url || companies[0].signature,
+            logo_url: d.logo_url || companies[0].logo,
+            qr_code_url: d.qr_code_url || (companies[0] as any).paymentQr,
+            authorizedSignatory: d.authorized_signatory || 'Ratnesh Mishra',
+            quotePrefix: d.quote_prefix || 'ASS',
+            default_terms: d.default_terms || null,
+          });
+
+          // Pre-populate default terms from company settings if available
+          if (d.default_terms && !editingQuotationId) {
+            if (d.default_terms.rooftop && Array.isArray(d.default_terms.rooftop) && d.default_terms.rooftop.length > 0) {
+              setTerms(d.default_terms.rooftop);
+            }
+            if (d.default_terms.b2b && Array.isArray(d.default_terms.b2b) && d.default_terms.b2b.length > 0) {
+              setB2bTerms(d.default_terms.b2b);
+            }
+          }
+        }
+      })
+      .catch(err => console.warn('Could not load company from /api/company:', err));
+  }, [editingQuotationId]);
+
+  const activeCompany = useMemo(() => {
+    if (customCompany) return customCompany;
+    return companies.find(c => c.id === selectedCompanyId) || companies[0];
+  }, [customCompany, selectedCompanyId]);
+
+  // WhatsApp Modal State
+  const [whatsAppModal, setWhatsAppModal] = useState<{
+    open: boolean;
+    phone: string;
+    message: string;
+    pdfUrl: string | null;
+  }>({
+    open: false,
+    phone: '',
+    message: '',
+    pdfUrl: null,
+  });
+  const [copiedWhatsApp, setCopiedWhatsApp] = useState(false);
+
+  // Helper to render Official Rubber Stamp Seal with Signature
+  const renderSealAndSign = (company: any) => {
+    const seal = company.stamp_url || company.signature_url || company.stamp || company.signature || companies[0].signature;
+    const resolved = resolveImageUrl(seal, origin);
+    if (!resolved) return <Box sx={{ height: 48 }} />;
+
+    return (
+      <Box
+        component="img"
+        src={resolved}
+        alt="Official Rubber Stamp Seal with Signature"
+        sx={{ width: 140, height: 50, objectFit: "contain", display: "block", ml: "auto", my: 0.2 }}
+        onError={(e: any) => e.target.style.display = 'none'}
+      />
+    );
+  };
 
   // Customer Details
+  const { data: session } = useSession();
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
@@ -140,7 +256,10 @@ function QuotationBuilder() {
   const [capacityKw, setCapacityKw] = useState<number>(3);
   const [phase, setPhase] = useState<number>(1);
 
-  // Panel Configuration
+  // Panel Configuration (supports multiple panel types, wattages & rates)
+  const [panelItems, setPanelItems] = useState<PanelConfigItem[]>([
+    { id: "panel-1", brand: "Adani", customBrand: "", wattage: 620, panelType: "Monoperc", quantity: 5, ratePerWatt: 22, ratePerPanel: 13640 }
+  ]);
   const [panelWattage, setPanelWattage] = useState<number>(620);
   const [panelBrand, setPanelBrand] = useState("Adani");
   const [customPanelBrand, setCustomPanelBrand] = useState("");
@@ -148,11 +267,17 @@ function QuotationBuilder() {
   const [panelWarranty, setPanelWarranty] = useState("25 Years"); // New Warranty State
   const effectivePanelBrand = panelBrand === "Other" ? customPanelBrand : panelBrand;
 
+  // Actual System Size (KW) - Editable by user
+  const [actualSystemSize, setActualSystemSize] = useState<number>(3.1);
+  const [actualSizeEdited, setActualSizeEdited] = useState<boolean>(false);
+
   // Inverter Configuration
   const [inverterBrand, setInverterBrand] = useState("Polycab");
   const [customInverterBrand, setCustomInverterBrand] = useState("");
   const [inverterModel, setInverterModel] = useState("3 KW On-Grid String");
   const [inverterWarranty, setInverterWarranty] = useState("5 Years"); // New Warranty State
+  const [showInverterWarranty, setShowInverterWarranty] = useState<boolean>(true); // Show/Hide Inverter Warranty Toggle
+  const [showRatePerWatt, setShowRatePerWatt] = useState<boolean>(true); // Show/Hide Rate Per Watt (₹/Wp) Toggle
   const [batteryWarranty, setBatteryWarranty] = useState("5 Years"); // Battery Warranty State
   const [customBatteryWarranty, setCustomBatteryWarranty] = useState(""); // Custom Battery Warranty
   const effectiveBatteryWarranty = batteryWarranty === "Other" ? customBatteryWarranty : batteryWarranty;
@@ -161,6 +286,7 @@ function QuotationBuilder() {
 
   // Pricing
   const [priceInput, setPriceInput] = useState<number>(180000); // Now represents Price Included GST
+  const [discount, setDiscount] = useState<number>(0); // Discount in INR
   const [gstRate, setGstRate] = useState<number>(gstConfig.compositeRate);
   const [centralSubsidy, setCentralSubsidy] = useState<number>(defaultSubsidy.central);
   const [stateSubsidy, setStateSubsidy] = useState<number>(defaultSubsidy.state);
@@ -224,8 +350,14 @@ function QuotationBuilder() {
           if (fd.customInverterBrand) setCustomInverterBrand(fd.customInverterBrand);
           if (fd.inverterModel) { setInverterModel(fd.inverterModel); setInverterModelEdited(true); }
           if (fd.inverterWarranty) setInverterWarranty(fd.inverterWarranty);
+          if (fd.showInverterWarranty !== undefined) setShowInverterWarranty(fd.showInverterWarranty);
+          if (fd.showRatePerWatt !== undefined) setShowRatePerWatt(fd.showRatePerWatt);
           if (fd.batteryWarranty) setBatteryWarranty(fd.batteryWarranty);
           if (fd.customBatteryWarranty) setCustomBatteryWarranty(fd.customBatteryWarranty);
+          if (fd.panelItems && Array.isArray(fd.panelItems) && fd.panelItems.length > 0) setPanelItems(fd.panelItems);
+          if (fd.actualSystemSize !== undefined) setActualSystemSize(fd.actualSystemSize);
+          if (fd.actualSizeEdited !== undefined) setActualSizeEdited(fd.actualSizeEdited);
+          if (fd.discount !== undefined) setDiscount(fd.discount);
           if (fd.priceInput !== undefined) setPriceInput(fd.priceInput);
           if (fd.gstRate !== undefined) setGstRate(fd.gstRate);
           if (fd.centralSubsidy !== undefined) setCentralSubsidy(fd.centralSubsidy);
@@ -318,7 +450,7 @@ function QuotationBuilder() {
   const serviceSubtotal = useMemo(() => serviceItems.reduce((s, i) => s + i.amount, 0), [serviceItems]);
   const serviceGstAmount = useMemo(() => +(serviceSubtotal * serviceGst / 100).toFixed(2), [serviceSubtotal, serviceGst]);
   const serviceGrandTotal = useMemo(() => +(serviceSubtotal + serviceGstAmount).toFixed(2), [serviceSubtotal, serviceGstAmount]);
-  const serviceRefNumber = useMemo(() => generateServiceRefNumber(activeCompany.id === "krishnanuja" ? "KRPL" : "ASS"), [activeCompany.id]);
+  const serviceRefNumber = useMemo(() => generateServiceRefNumber("ASS"), []);
 
   const updateServiceItem = (idx: number, field: keyof ServiceItem, val: string | number) => {
     const updated = [...serviceItems];
@@ -369,6 +501,8 @@ function QuotationBuilder() {
     fetchB2BCatalog();
   }, [fetchB2BCatalog, selectedSystemType]);
 
+  const [editRooftopTermIdx, setEditRooftopTermIdx] = useState(-1);
+  const [editRooftopTermText, setEditRooftopTermText] = useState("");
   const [editB2BTermIdx, setEditB2BTermIdx] = useState(-1);
   const [editB2BTermText, setEditB2BTermText] = useState("");
   const [addB2BCustomDialog, setAddB2BCustomDialog] = useState(false);
@@ -390,7 +524,7 @@ function QuotationBuilder() {
     }, 0);
     return +totalGst.toFixed(2);
   }, [b2bItems]);
-  const b2bGrandTotal = useMemo(() => Math.round(b2bSubtotal + b2bGstAmount), [b2bSubtotal, b2bGstAmount]);
+  const b2bGrandTotal = useMemo(() => +(b2bSubtotal + b2bGstAmount).toFixed(2), [b2bSubtotal, b2bGstAmount]);
 
   // Determine if single uniform GST rate or mixed rates across line items
   const b2bUniqueGstRates = useMemo(() => Array.from(new Set(b2bItems.map(it => it.gstRate !== undefined ? Number(it.gstRate) : 18))), [b2bItems]);
@@ -482,9 +616,126 @@ function QuotationBuilder() {
 
   const printRef = useRef<HTMLDivElement>(null);
 
-  // Calculate number of panels needed
-  const numberOfPanels = useMemo(() => Math.ceil((capacityKw * 1000) / (panelWattage || 1)), [capacityKw, panelWattage]);
-  const actualSystemSize = useMemo(() => +((numberOfPanels * (panelWattage || 0)) / 1000).toFixed(2), [numberOfPanels, panelWattage]);
+  // Multi-panel aggregation calculations
+  const totalPanelsCount = useMemo(() => {
+    return panelItems.reduce((acc, p) => acc + (Number(p.quantity) || 0), 0);
+  }, [panelItems]);
+
+  const totalCalculatedWattageWp = useMemo(() => {
+    return panelItems.reduce((acc, p) => acc + ((Number(p.wattage) || 0) * (Number(p.quantity) || 0)), 0);
+  }, [panelItems]);
+
+  const calcSystemKw = useMemo(() => {
+    return +(totalCalculatedWattageWp / 1000).toFixed(2);
+  }, [totalCalculatedWattageWp]);
+
+  const totalPanelsCost = useMemo(() => {
+    return panelItems.reduce((acc, p) => {
+      const qty = Number(p.quantity) || 0;
+      const watt = Number(p.wattage) || 0;
+      const panelRate = Number(p.ratePerPanel) || (watt * (Number(p.ratePerWatt) || 0));
+      return acc + (qty * panelRate);
+    }, 0);
+  }, [panelItems]);
+
+  const numberOfPanels = totalPanelsCount;
+
+  // Auto-sync actualSystemSize to calcSystemKw if user hasn't manually overridden it
+  useEffect(() => {
+    if (!actualSizeEdited) {
+      setActualSystemSize(calcSystemKw);
+    }
+  }, [calcSystemKw, actualSizeEdited]);
+
+  // When capacityKw changes in single-panel mode, automatically update quantity if not manually edited
+  useEffect(() => {
+    if (panelItems.length === 1 && !actualSizeEdited) {
+      const singleWattage = panelItems[0]?.wattage || panelWattage || 620;
+      const neededQty = Math.ceil((capacityKw * 1000) / (singleWattage || 1));
+      if (panelItems[0] && panelItems[0].quantity !== neededQty) {
+        setPanelItems(prev => [{ ...prev[0], quantity: neededQty }]);
+      }
+    }
+  }, [capacityKw, panelWattage, actualSizeEdited, panelItems]);
+
+  const updatePanelItem = (id: string, field: keyof PanelConfigItem, val: any) => {
+    setPanelItems(prev =>
+      prev.map(item => {
+        if (item.id !== id) return item;
+        const updated = { ...item, [field]: val };
+        const watt = field === 'wattage' ? (Number(val) || 0) : (item.wattage || 0);
+
+        if (field === 'ratePerWatt') {
+          const rWp = val === "" ? 0 : (parseFloat(val) || 0);
+          updated.ratePerWatt = rWp;
+          updated.ratePerPanel = watt > 0 ? Math.round(watt * rWp) : 0;
+        } else if (field === 'ratePerPanel') {
+          const rP = val === "" ? 0 : (parseFloat(val) || 0);
+          updated.ratePerPanel = rP;
+          updated.ratePerWatt = watt > 0 ? +(rP / watt).toFixed(2) : 0;
+        } else if (field === 'wattage') {
+          if (item.ratePerWatt) {
+            updated.ratePerPanel = Math.round(watt * item.ratePerWatt);
+          } else if (item.ratePerPanel && watt > 0) {
+            updated.ratePerWatt = +(item.ratePerPanel / watt).toFixed(2);
+          }
+        }
+
+        // Sync legacy scalar state for item 0
+        if (item.id === prev[0].id) {
+          if (field === 'wattage') setPanelWattage(Number(val) || 0);
+          if (field === 'brand') setPanelBrand(val);
+          if (field === 'customBrand') setCustomPanelBrand(val);
+          if (field === 'panelType') setPanelType(val);
+        }
+        return updated;
+      })
+    );
+  };
+
+  const addPanelItem = () => {
+    const newItem: PanelConfigItem = {
+      id: `panel-${Date.now()}`,
+      brand: "Waaree",
+      customBrand: "",
+      wattage: 580,
+      panelType: "Topcon",
+      quantity: 2,
+      ratePerWatt: 24,
+      ratePerPanel: 13920,
+    };
+    setPanelItems(prev => [...prev, newItem]);
+  };
+
+  const removePanelItem = (id: string) => {
+    if (panelItems.length <= 1) return;
+    setPanelItems(prev => prev.filter(p => p.id !== id));
+  };
+
+  // Keep components table row #0 reactive to panel changes
+  useEffect(() => {
+    if (components.length === 0) return;
+    const panelDesc = panelItems.length > 1
+      ? panelItems.map((p) => {
+          const rateInfo = p.ratePerWatt ? ` @ ₹${p.ratePerWatt}/Wp` : (p.ratePerPanel ? ` @ ₹${p.ratePerPanel}/pc` : '');
+          return `${p.brand === "Other" && p.customBrand ? p.customBrand : p.brand} ${p.wattage}Wp (${p.panelType}) [${p.quantity} Nos${rateInfo}]`;
+        }).join("; ")
+      : `${panelItems[0]?.wattage || panelWattage}Wp (${panelItems[0]?.panelType || panelType}) Modules${panelItems[0]?.ratePerWatt ? ` @ ₹${panelItems[0].ratePerWatt}/Wp` : (panelItems[0]?.ratePerPanel ? ` @ ₹${panelItems[0].ratePerPanel}/pc` : '')}`;
+    const panelMake = panelItems.length > 1
+      ? Array.from(new Set(panelItems.map((p) => p.brand === "Other" && p.customBrand ? p.customBrand : p.brand))).join(" / ")
+      : (panelItems[0]?.brand === "Other" && panelItems[0]?.customBrand ? panelItems[0].customBrand : (panelItems[0]?.brand || effectivePanelBrand));
+    const panelQty = `${totalPanelsCount.toString().padStart(2, '0')} Nos`;
+
+    setComponents(prev => {
+      if (prev.length === 0) return prev;
+      if (prev[0].description === panelDesc && prev[0].quantity === panelQty && prev[0].make === panelMake) {
+        return prev;
+      }
+      const updated = [...prev];
+      updated[0] = { ...updated[0], description: panelDesc, quantity: panelQty, make: panelMake };
+      return updated;
+    });
+  }, [components.length, panelItems, totalPanelsCount, panelWattage, panelType, effectivePanelBrand]);
 
   // Load components from API (or fall back to hardcoded defaults) when system type changes
   const fetchComponentsFromApi = useCallback(async (systemType: string) => {
@@ -493,6 +744,17 @@ function QuotationBuilder() {
     try {
       const res = await fetch(`/api/components?system_type=${encodeURIComponent(systemType)}`);
       const data = await res.json();
+      const panelDesc = panelItems.length > 1
+        ? panelItems.map((p) => {
+            const rateInfo = p.ratePerWatt ? ` @ ₹${p.ratePerWatt}/Wp` : (p.ratePerPanel ? ` @ ₹${p.ratePerPanel}/pc` : '');
+            return `${p.brand === "Other" && p.customBrand ? p.customBrand : p.brand} ${p.wattage}Wp (${p.panelType}) [${p.quantity} Nos${rateInfo}]`;
+          }).join("; ")
+        : `${panelWattage}Wp (${panelType}) Modules${panelItems[0]?.ratePerWatt ? ` @ ₹${panelItems[0].ratePerWatt}/Wp` : ''}`;
+      const panelMake = panelItems.length > 1
+        ? Array.from(new Set(panelItems.map((p) => p.brand === "Other" && p.customBrand ? p.customBrand : p.brand))).join(" / ")
+        : effectivePanelBrand;
+      const panelQty = `${totalPanelsCount.toString().padStart(2, '0')} Nos`;
+
       if (data.success && data.data && data.data.length > 0 && !data.fromDefaults) {
         // Got components from DB — use them as base, apply current panel/inverter info
         const dbComponents = data.data.map((c: any, i: number) => ({
@@ -504,7 +766,7 @@ function QuotationBuilder() {
         }));
         // Update first component (panels) and second (inverter) with current form values
         const updatedComponents = dbComponents.map((c: any, i: number) => {
-          if (i === 0) return { ...c, description: `${panelWattage}Wp (${panelType}) Modules`, quantity: `${numberOfPanels.toString().padStart(2, '0')} Nos`, make: effectivePanelBrand };
+          if (i === 0) return { ...c, description: panelDesc, quantity: panelQty, make: panelMake };
           if (i === 1) return { ...c, description: inverterModel, make: effectiveInverterBrand };
           return c;
         });
@@ -514,7 +776,7 @@ function QuotationBuilder() {
         const defaults = defaultComponents[systemType as keyof typeof defaultComponents];
         if (defaults) {
           const updatedDefaults = defaults.map((c, i) => {
-            if (i === 0) return { ...c, description: `${panelWattage}Wp (${panelType}) Modules`, quantity: `${numberOfPanels.toString().padStart(2, '0')} Nos`, make: effectivePanelBrand, sort_order: i };
+            if (i === 0) return { ...c, description: panelDesc, quantity: panelQty, make: panelMake, sort_order: i };
             if (i === 1) return { ...c, description: inverterModel, make: effectiveInverterBrand, sort_order: i };
             return { ...c, sort_order: i };
           });
@@ -525,17 +787,34 @@ function QuotationBuilder() {
       // On error, fall back to hardcoded defaults
       const defaults = defaultComponents[systemType as keyof typeof defaultComponents];
       if (defaults) {
+        const panelDesc = panelItems.length > 1
+          ? panelItems.map((p) => {
+              const rateInfo = p.ratePerWatt ? ` @ ₹${p.ratePerWatt}/Wp` : (p.ratePerPanel ? ` @ ₹${p.ratePerPanel}/pc` : '');
+              return `${p.brand === "Other" && p.customBrand ? p.customBrand : p.brand} ${p.wattage}Wp (${p.panelType}) [${p.quantity} Nos${rateInfo}]`;
+            }).join("; ")
+          : `${panelWattage}Wp (${panelType}) Modules${panelItems[0]?.ratePerWatt ? ` @ ₹${panelItems[0].ratePerWatt}/Wp` : ''}`;
+        const panelMake = panelItems.length > 1
+          ? Array.from(new Set(panelItems.map((p) => p.brand === "Other" && p.customBrand ? p.customBrand : p.brand))).join(" / ")
+          : effectivePanelBrand;
+        const panelQty = `${totalPanelsCount.toString().padStart(2, '0')} Nos`;
+
         const updatedDefaults = defaults.map((c, i) => {
-          if (i === 0) return { ...c, description: `${panelWattage}Wp (${panelType}) Modules`, quantity: `${numberOfPanels.toString().padStart(2, '0')} Nos`, make: effectivePanelBrand, sort_order: i };
+          if (i === 0) return { ...c, description: panelDesc, quantity: panelQty, make: panelMake, sort_order: i };
           if (i === 1) return { ...c, description: inverterModel, make: effectiveInverterBrand, sort_order: i };
           return { ...c, sort_order: i };
         });
         setComponents(updatedDefaults);
       }
     }
-    const defaultTermsList = defaultTerms[systemType as keyof typeof defaultTerms];
-    if (defaultTermsList) setTerms(defaultTermsList.slice(0, 8));
-  }, [panelWattage, effectivePanelBrand, panelType, numberOfPanels, effectiveInverterBrand, inverterModel, editingQuotationId, editLoaded]);
+    if (terms.length === 0) {
+      if (customCompany?.default_terms?.rooftop && Array.isArray(customCompany.default_terms.rooftop) && customCompany.default_terms.rooftop.length > 0) {
+        setTerms(customCompany.default_terms.rooftop);
+      } else {
+        const defaultTermsList = defaultTerms[systemType as keyof typeof defaultTerms];
+        if (defaultTermsList) setTerms(defaultTermsList.slice(0, 8));
+      }
+    }
+  }, [panelItems, totalPanelsCount, panelWattage, effectivePanelBrand, panelType, effectiveInverterBrand, inverterModel, editingQuotationId, editLoaded, terms.length, customCompany?.default_terms]);
 
   useEffect(() => {
     if (!isServiceMode && !isB2BMode) {
@@ -572,20 +851,27 @@ function QuotationBuilder() {
     return { structureCost, panelsCost, wireCost, total: structureCost + panelsCost + wireCost };
   }, [extraStructureEnabled, extraStructureRate, actualSystemSize, extraPanelsEnabled, extraPanelCount, extraPanelPrice, extraWireEnabled, extraWireLength, extraWireRate]);
 
-  // Calculate GST and totals (Reverse calculation from Inclusive Price)
+  // Calculate GST and totals (Reverse calculation from Inclusive Price with exact accounting balance)
   const calculations = useMemo(() => {
-    // Reverse calculate base price from the input (which is GST inclusive)
+    // 1. Reverse calculate base price from the input (which is GST inclusive)
     // Formula: Inclusive = Base * (1 + Rate)  =>  Base = Inclusive / (1 + Rate)
-    const derivedBasePrice = priceInput / (1 + gstRate / 100);
+    const derivedBasePrice = +(priceInput / (1 + gstRate / 100)).toFixed(2);
+    // Base GST = Inclusive - Base Price (guarantees exact sum without 1-paisa drift)
+    const baseGstAmount = +(priceInput - derivedBasePrice).toFixed(2);
 
-    // Add extra costs (assuming they act as taxable base additions) to the derived base
-    const totalTaxableValue = derivedBasePrice + extraCosts.total;
+    // 2. Extra works (taxable additions)
+    const extraTaxable = +(extraCosts.total).toFixed(2);
+    const extraGstAmount = +(extraTaxable * (gstRate / 100)).toFixed(2);
 
-    const gstAmount = +(totalTaxableValue * (gstRate / 100)).toFixed(2);
+    // 3. Combined Taxable Value & GST
+    const totalTaxableValue = +(derivedBasePrice + extraTaxable).toFixed(2);
+    const gstAmount = +(baseGstAmount + extraGstAmount).toFixed(2);
     const totalAmount = +(totalTaxableValue + gstAmount).toFixed(2);
+    const discountAmount = Math.max(0, Number(discount) || 0);
+    const payableAmount = Math.max(0, +(totalAmount - discountAmount).toFixed(2));
 
-    const savings = calculateSavings(actualSystemSize, totalAmount, centralSubsidy, stateSubsidy);
-    const effectiveCost = Math.max(0, totalAmount - centralSubsidy - stateSubsidy);
+    const savings = calculateSavings(actualSystemSize, payableAmount, centralSubsidy, stateSubsidy);
+    const effectiveCost = Math.max(0, +(payableAmount - centralSubsidy - stateSubsidy).toFixed(2));
 
     return {
       basePrice: totalTaxableValue, // This is the total taxable base used for calculation
@@ -594,11 +880,13 @@ function QuotationBuilder() {
       gstRate,
       gstAmount,
       totalAmount,
+      discount: discountAmount,
+      payableAmount,
       ...savings,
       effectiveCost,
       systemPriceIncGst: priceInput // Keep track of the input
     };
-  }, [priceInput, extraCosts.total, gstRate, actualSystemSize, centralSubsidy, stateSubsidy]);
+  }, [priceInput, extraCosts.total, gstRate, actualSystemSize, centralSubsidy, stateSubsidy, discount]);
 
   const quoteNumber = useMemo(() => {
     if (!customerName) return "";
@@ -684,6 +972,12 @@ function QuotationBuilder() {
 
   const handleReset = () => {
     setCustomerName(""); setCustomerPhone(""); setCustomerAddress(""); setCapacityKw(3); setPhase(1); setPanelWattage(620); setPanelBrand("Adani"); setPriceInput(180000); setInverterModel("3 KW On-Grid String"); setInverterModelEdited(false);
+    setPanelItems([{ id: "panel-1", brand: "Adani", customBrand: "", wattage: 620, panelType: "Monoperc", quantity: 5 }]);
+    setActualSystemSize(3.1);
+    setActualSizeEdited(false);
+    setInverterWarranty("5 Years");
+    setShowInverterWarranty(true);
+    setDiscount(0);
     setB2bClientGstin("");
     // Clear edit mode
     if (editingQuotationId) {
@@ -704,13 +998,19 @@ function QuotationBuilder() {
     customPanelBrand,
     panelType,
     panelWarranty,
+    panelItems,
+    actualSystemSize,
+    actualSizeEdited,
     inverterBrand,
     customInverterBrand,
     inverterModel,
     inverterWarranty,
+    showInverterWarranty,
+    showRatePerWatt,
     batteryWarranty,
     customBatteryWarranty,
     priceInput,
+    discount,
     gstRate,
     centralSubsidy,
     stateSubsidy,
@@ -737,7 +1037,7 @@ function QuotationBuilder() {
     b2bPaymentTerms,
     b2bDeliveryDays,
     b2bValidDays,
-  }), [selectedCompanyId, selectedSystemType, capacityKw, phase, panelWattage, panelBrand, customPanelBrand, panelType, panelWarranty, inverterBrand, customInverterBrand, inverterModel, inverterWarranty, batteryWarranty, customBatteryWarranty, priceInput, gstRate, centralSubsidy, stateSubsidy, extraStructureEnabled, extraStructureRate, extraPanelsEnabled, extraPanelCount, extraPanelPrice, extraWireEnabled, extraWireLength, extraWireRate, serviceItems, serviceTerms, serviceGst, serviceProposalTitle, b2bItems, b2bTerms, b2bProposalTitle, b2bStructureMake, b2bClientGstin, b2bDispatchLocation, b2bPaymentTerms, b2bDeliveryDays, b2bValidDays]);
+  }), [selectedCompanyId, selectedSystemType, capacityKw, phase, panelWattage, panelBrand, customPanelBrand, panelType, panelWarranty, panelItems, actualSystemSize, actualSizeEdited, inverterBrand, customInverterBrand, inverterModel, inverterWarranty, showInverterWarranty, showRatePerWatt, batteryWarranty, customBatteryWarranty, priceInput, discount, gstRate, centralSubsidy, stateSubsidy, extraStructureEnabled, extraStructureRate, extraPanelsEnabled, extraPanelCount, extraPanelPrice, extraWireEnabled, extraWireLength, extraWireRate, serviceItems, serviceTerms, serviceGst, serviceProposalTitle, b2bItems, b2bTerms, b2bProposalTitle, b2bStructureMake, b2bClientGstin, b2bDispatchLocation, b2bPaymentTerms, b2bDeliveryDays, b2bValidDays]);
 
   const saveToDatabase = async (pdfUrl?: string, status: string = 'draft') => {
     if (!customerName) return;
@@ -749,7 +1049,7 @@ function QuotationBuilder() {
       const baseAmount = isB2BMode ? b2bSubtotal : isServiceMode ? serviceSubtotal : calculations.basePrice;
       const effectiveGstRate = isB2BMode ? 18 : isServiceMode ? serviceGst : gstRate;
       const effectiveGstAmount = isB2BMode ? b2bGstAmount : isServiceMode ? serviceGstAmount : calculations.gstAmount;
-      const effectiveTotalAmount = isB2BMode ? b2bGrandTotal : isServiceMode ? serviceGrandTotal : calculations.totalAmount;
+      const effectiveTotalAmount = isB2BMode ? b2bGrandTotal : isServiceMode ? serviceGrandTotal : calculations.payableAmount;
       const effectiveTerms = isB2BMode ? b2bTerms : isServiceMode ? serviceTerms : terms;
       const effectiveComponents = isB2BMode
         ? b2bItems.map((it, idx) => ({
@@ -807,8 +1107,11 @@ function QuotationBuilder() {
     panelBrand: effectivePanelBrand,
     panelWattage,
     panelType,
+    panelItems,
     inverterModel,
     totalAmount: calculations.totalAmount,
+    discount,
+    payableAmount: calculations.payableAmount,
     effectiveCost: calculations.effectiveCost,
     centralSubsidy,
     stateSubsidy
@@ -843,6 +1146,7 @@ function QuotationBuilder() {
           gstAmount: b2bGstAmount,
           total: b2bGrandTotal,
           discount: 0,
+          payableAmount: b2bGrandTotal,
           grandTotal: b2bGrandTotal,
           centralSubsidy: 0,
           stateSubsidy: 0,
@@ -888,7 +1192,10 @@ function QuotationBuilder() {
         panelWarranty: panelWarranty,
         inverterBrand: inverterModel,
         inverterWarranty: inverterWarranty,
+        showInverterWarranty: showInverterWarranty && inverterWarranty !== "None",
+        showRatePerWatt: showRatePerWatt,
         batteryWarranty: effectiveBatteryWarranty,
+        panelItems: panelItems,
       },
       calculations: {
         basePrice: calculations.originalBasePrice,
@@ -896,8 +1203,9 @@ function QuotationBuilder() {
         subtotal: calculations.basePrice,
         gstAmount: calculations.gstAmount,
         total: calculations.totalAmount,
-        discount: 0,
-        grandTotal: calculations.totalAmount,
+        discount: discount,
+        payableAmount: calculations.payableAmount,
+        grandTotal: calculations.payableAmount,
         centralSubsidy,
         stateSubsidy,
         effectiveCost: calculations.effectiveCost
@@ -953,63 +1261,94 @@ function QuotationBuilder() {
     } finally { setLoading(false); }
   };
 
-  // WhatsApp handler - generates PDF, uploads to Supabase, sends via DoubleTick
+  // WhatsApp Direct Share handler (Free wa.me, generates PDF + opens direct WhatsApp)
   const handleSendWhatsApp = async () => {
     if (!customerName) { setNotification({ open: true, message: "Customer name is required", severity: "error" }); return; }
     if (!customerPhone) { setNotification({ open: true, message: "Customer phone is required for WhatsApp", severity: "error" }); return; }
 
     setLoading(true);
-
-    if (isB2BMode) {
-      const text = `*${activeCompany.name.toUpperCase()} - B2B COMMERCIAL QUOTATION*\n\n` +
-        `*Quote Ref:* ${b2bRefNumber}\n` +
-        `*Customer:* ${customerName}\n` +
-        `*Make:* ${b2bStructureMake} (Solar Mounting Structure & BOS)\n` +
-        `*Branding:* AVAILABLE AT BEST RATE\n` +
-        `*Total Line Items:* ${b2bItems.length}\n` +
-        `*Taxable Subtotal:* ₹${formatCurrency(b2bSubtotal)}\n` +
-        `*${b2bGstLabel.replace(':', '')}:* ₹${formatCurrency(b2bGstAmount)}\n` +
-        `*Grand Total:* ₹${formatCurrency(b2bGrandTotal)}/-\n` +
-        `*Dispatch:* ${b2bDispatchLocation}\n` +
-        `*Payment:* ${b2bPaymentTerms}\n\n` +
-        `*Top Products:* \n` +
-        b2bItems.slice(0, 5).map(it => `• ${it.name} (${it.qty} ${it.unit}) @ ₹${formatCurrency(it.basePrice)} = ₹${formatCurrency(it.amount)}`).join('\n') +
-        (b2bItems.length > 5 ? `\n• ...and ${b2bItems.length - 5} more items` : '') +
-        `\n\nContact us for dispatch clearance.`;
-
-      const cleanPhone = customerPhone.replace(/[^0-9]/g, '');
-      const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-      window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`, '_blank');
-      await saveToDatabase(undefined, "WhatsApp Sent");
-      setNotification({ open: true, message: "Opened WhatsApp with B2B Quotation summary!", severity: "success" });
-      setLoading(false);
-      return;
-    }
-
-    setNotification({ open: true, message: "Generating PDF and sending to WhatsApp...", severity: "info" });
+    setNotification({ open: true, message: "Preparing quotation and opening WhatsApp...", severity: "info" });
 
     try {
-      const quoteData = buildQuoteData({ skipWhatsApp: false });
+      // 1. Generate / Upload PDF so we have a cloud document link
+      let pdfUrl: string | null = null;
+      try {
+        const quoteData = buildQuoteData({ skipWhatsApp: true });
+        const res = await fetch("/api/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(quoteData)
+        });
+        const result = await res.json();
+        if (res.ok && result.url) {
+          pdfUrl = result.url;
+        }
+      } catch (pdfErr) {
+        console.warn("Could not pre-generate PDF for WhatsApp share, will continue with text:", pdfErr);
+      }
 
-      const response = await fetch("/api/quote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(quoteData)
+      // 2. Build professional WhatsApp message
+      const messageText = buildQuoteWhatsAppMessage({
+        customerName,
+        customerPhone,
+        quoteNumber: isB2BMode ? b2bRefNumber : (isServiceMode ? serviceRefNumber : quoteNumber),
+        systemCapacityKw: isB2BMode || isServiceMode ? undefined : actualSystemSize,
+        systemType: isB2BMode ? "Commercial Mounting Structure & BOS" : (isServiceMode ? "Solar Service & O&M" : selectedSystemType),
+        panelBrand: isB2BMode ? b2bStructureMake : (panelItems.length > 1 ? `${panelItems.length} Panel Types` : effectivePanelBrand),
+        panelWattage: panelItems.length > 1 ? totalCalculatedWattageWp : panelWattage,
+        totalAmount: isB2BMode ? b2bGrandTotal : (isServiceMode ? serviceGrandTotal : calculations.totalAmount),
+        discount: isB2BMode || isServiceMode ? 0 : discount,
+        payableAmount: isB2BMode ? b2bGrandTotal : (isServiceMode ? serviceGrandTotal : calculations.payableAmount),
+        centralSubsidy: isB2BMode || isServiceMode ? 0 : centralSubsidy,
+        stateSubsidy: isB2BMode || isServiceMode ? 0 : stateSubsidy,
+        pdfUrl: pdfUrl,
+        vendorName: activeCompany.name,
+        vendorSignatory: (activeCompany as any).authorizedSignatory || (activeCompany as any).authorized_signatory,
+        vendorPhone: activeCompany.phone,
+        isB2B: isB2BMode,
+        b2bDetails: isB2BMode ? {
+          refNumber: b2bRefNumber,
+          make: b2bStructureMake,
+          itemCount: b2bItems.length,
+          taxableSubtotal: b2bSubtotal,
+          gstAmount: b2bGstAmount,
+          grandTotal: b2bGrandTotal,
+          dispatchLocation: b2bDispatchLocation,
+          paymentTerms: b2bPaymentTerms,
+        } : undefined,
+        isService: isServiceMode,
+        serviceDetails: isServiceMode ? {
+          refNumber: serviceRefNumber,
+          itemCount: serviceItems.length,
+          grandTotal: serviceGrandTotal,
+        } : undefined,
       });
 
-      const result = await response.json();
+      // 3. Open WhatsApp directly in new window / tab
+      openWhatsAppDirect(customerPhone, messageText);
 
-      if (response.ok) {
-        saveToDatabase(result.url, "WhatsApp Sent");
-        setNotification({ open: true, message: "Quotation PDF queued for WhatsApp delivery. It may take a moment to reach the customer.", severity: "success" });
-      } else {
-        throw new Error(result.message || "Failed to send WhatsApp");
-      }
-    } catch (error) {
+      // 4. Save to database
+      await saveToDatabase(pdfUrl || undefined, "WhatsApp Sent");
+
+      // 5. Open dialog for easy copy or re-opening
+      setWhatsAppModal({
+        open: true,
+        phone: customerPhone.trim(),
+        message: messageText,
+        pdfUrl: pdfUrl,
+      });
+
+      setNotification({
+        open: true,
+        message: "✅ WhatsApp opened with pre-filled quotation & document link!",
+        severity: "success",
+      });
+    } catch (error: any) {
       console.error("WhatsApp error:", error);
-      setNotification({ open: true, message: (error as any).message, severity: "error" });
+      setNotification({ open: true, message: (error as any).message || "Failed to prepare WhatsApp share", severity: "error" });
+    } finally {
+      setLoading(false);
     }
-    finally { setLoading(false); }
   };
 
 
@@ -1127,51 +1466,141 @@ function QuotationBuilder() {
         }
       `}</style>
       {/* LEFT EDIT PANEL */}
-      <Box className="no-print" sx={{ width: { xs: "100%", md: 380 }, minWidth: { xs: "100%", md: 380 }, bgcolor: "white", borderRight: { xs: "none", md: "1px solid #e2e8f0" }, borderBottom: { xs: "1px solid #e2e8f0", md: "none" }, display: "flex", flexDirection: "column", overflow: "hidden", height: { xs: "auto", md: "100%" } }}>
+      <Box className="no-print" sx={{ width: { xs: "100%", md: 410, lg: 430 }, minWidth: { xs: "100%", md: 400, lg: 430 }, bgcolor: "white", borderRight: { xs: "none", md: "1px solid #e2e8f0" }, borderBottom: { xs: "1px solid #e2e8f0", md: "none" }, display: "flex", flexDirection: "column", overflow: "hidden", height: { xs: "auto", md: "100%" } }}>
         {/* Header */}
-        <Box sx={{ p: 2, borderBottom: "1px solid #e2e8f0", bgcolor: "#1e3a5f", color: "white" }}>
+        <Box sx={{ p: 1.5, borderBottom: "1px solid #0f2942", bgcolor: "#1e3a5f", color: "white" }}>
+          {/* Top Row: Brand & Active User */}
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Typography variant="h6" fontWeight="bold" sx={{ fontSize: 16 }}>
-              <SolarPower sx={{ mr: 1, verticalAlign: "middle", fontSize: 20 }} />
-              Quotation Builder
-            </Typography>
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <Link href="/service" style={{ textDecoration: 'none' }}>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  sx={{
-                    color: "white",
-                    borderColor: "rgba(255,255,255,0.5)",
-                    "&:hover": { borderColor: "white", bgcolor: "rgba(255,255,255,0.1)" },
-                    textTransform: "none",
-                    fontWeight: "bold",
-                    px: 1.5,
-                    fontSize: 11
-                  }}
-                >
-                  Service
-                </Button>
-              </Link>
-              <Link href="/admin" style={{ textDecoration: 'none' }}>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<AdminPanelSettings fontSize="small" />}
-                  sx={{
-                    color: "white",
-                    borderColor: "rgba(255,255,255,0.5)",
-                    "&:hover": { borderColor: "white", bgcolor: "rgba(255,255,255,0.1)" },
-                    textTransform: "none",
-                    fontWeight: "bold",
-                    px: 1.5,
-                    fontSize: 11
-                  }}
-                >
-                  Admin
-                </Button>
-              </Link>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+              <SolarPower sx={{ color: "#f59e0b", fontSize: 22 }} />
+              <Typography variant="subtitle1" fontWeight={800} sx={{ fontSize: 16, letterSpacing: -0.2, whiteSpace: "nowrap" }}>
+                Quotation Builder
+              </Typography>
             </Box>
+
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+              {session?.user ? (
+                <>
+                  <Chip
+                    icon={session.user.role === 'admin' ? <Shield sx={{ fontSize: '13px !important', color: '#f59e0b !important' }} /> : <Person sx={{ fontSize: '13px !important', color: '#38bdf8 !important' }} />}
+                    label={`${(session.user.name || session.user.email || 'User').split(' ')[0]} (${(session.user.role || 'sales').toUpperCase()})`}
+                    size="small"
+                    sx={{
+                      bgcolor: "rgba(255,255,255,0.15)",
+                      color: "white",
+                      fontWeight: 700,
+                      fontSize: 11,
+                      height: 24,
+                      border: "1px solid rgba(255,255,255,0.25)"
+                    }}
+                  />
+                  <Tooltip title="Sign Out">
+                    <IconButton
+                      size="small"
+                      onClick={() => signOut()}
+                      sx={{ color: "rgba(255,255,255,0.75)", p: 0.5, "&:hover": { color: "#ef4444", bgcolor: "rgba(255,255,255,0.12)" } }}
+                    >
+                      <Logout sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              ) : (
+                <Link href="/login" style={{ textDecoration: 'none' }}>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    sx={{
+                      bgcolor: "#f59e0b",
+                      color: "#0f172a",
+                      "&:hover": { bgcolor: "#d97706" },
+                      textTransform: "none",
+                      fontWeight: "bold",
+                      py: 0.3,
+                      px: 1.5,
+                      fontSize: 11
+                    }}
+                  >
+                    Sign In
+                  </Button>
+                </Link>
+              )}
+            </Box>
+          </Box>
+
+          {/* Bottom Row: Quick Navigation Action Bar */}
+          <Box sx={{ display: "flex", gap: 0.75, mt: 1.25 }}>
+            <Link href="/admin" style={{ flex: 1, textDecoration: "none" }}>
+              <Button
+                fullWidth
+                variant="outlined"
+                size="small"
+                startIcon={<AdminPanelSettings sx={{ fontSize: 15 }} />}
+                sx={{
+                  color: "white",
+                  borderColor: "rgba(255,255,255,0.3)",
+                  bgcolor: "rgba(255,255,255,0.08)",
+                  "&:hover": { borderColor: "white", bgcolor: "rgba(255,255,255,0.18)" },
+                  textTransform: "none",
+                  fontWeight: 600,
+                  py: 0.4,
+                  fontSize: 11.5,
+                  borderRadius: 1.5,
+                  whiteSpace: "nowrap"
+                }}
+              >
+                Admin
+              </Button>
+            </Link>
+
+            <Can I="manage" a="CompanySettings">
+              <Link href="/admin/company" style={{ flex: 1.2, textDecoration: "none" }}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  size="small"
+                  startIcon={<Business sx={{ fontSize: 15 }} />}
+                  sx={{
+                    color: "white",
+                    borderColor: "rgba(255,255,255,0.3)",
+                    bgcolor: "rgba(255,255,255,0.08)",
+                    "&:hover": { borderColor: "white", bgcolor: "rgba(255,255,255,0.18)" },
+                    textTransform: "none",
+                    fontWeight: 600,
+                    py: 0.4,
+                    fontSize: 11.5,
+                    borderRadius: 1.5,
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  Company
+                </Button>
+              </Link>
+            </Can>
+
+            <Can I="manage" a="User">
+              <Link href="/admin/users" style={{ flex: 1.3, textDecoration: "none" }}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  size="small"
+                  startIcon={<Group sx={{ fontSize: 15 }} />}
+                  sx={{
+                    color: "white",
+                    borderColor: "rgba(255,255,255,0.3)",
+                    bgcolor: "rgba(255,255,255,0.08)",
+                    "&:hover": { borderColor: "white", bgcolor: "rgba(255,255,255,0.18)" },
+                    textTransform: "none",
+                    fontWeight: 600,
+                    py: 0.4,
+                    fontSize: 11.5,
+                    borderRadius: 1.5,
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  Team & Users
+                </Button>
+              </Link>
+            </Can>
           </Box>
         </Box>
 
@@ -1194,16 +1623,6 @@ function QuotationBuilder() {
 
         {/* Scrollable Form */}
         <Box sx={{ flex: 1, overflow: "auto", p: 0 }}>
-          {/* Company Selection */}
-          <Box sx={{ p: 2, borderBottom: "1px solid #e2e8f0", bgcolor: "#f8fafc" }}>
-            <FormControl fullWidth size="small">
-              <InputLabel>Company</InputLabel>
-              <Select value={selectedCompanyId} label="Company" onChange={(e) => setSelectedCompanyId(e.target.value)}>
-                {companies.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
-              </Select>
-            </FormControl>
-          </Box>
-
           {/* System Type */}
           <Accordion defaultExpanded disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
             <AccordionSummary expandIcon={<ExpandMore />} sx={{ bgcolor: "#f8fafc", minHeight: 44, "& .MuiAccordionSummary-content": { my: 0.5 } }}>
@@ -1658,28 +2077,223 @@ function QuotationBuilder() {
               </AccordionSummary>
               <AccordionDetails sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
                 <Box sx={{ display: "flex", gap: 1 }}>
-                  <TextField label="Capacity (KW)" type="number" value={capacityKw} onChange={(e) => setCapacityKw(e.target.value === "" ? 0 : parseFloat(e.target.value))} inputProps={{ step: 0.1, min: 0 }} size="small" sx={{ flex: 1 }} />
-                  <TextField label="Wattage (Wp)" type="number" value={panelWattage} onChange={(e) => setPanelWattage(e.target.value === "" ? 0 : parseInt(e.target.value))} inputProps={{ step: 5, min: 0 }} size="small" sx={{ flex: 1 }} />
+                  <TextField
+                    label="Target Capacity (KW)"
+                    type="number"
+                    value={capacityKw}
+                    onChange={(e) => setCapacityKw(e.target.value === "" ? 0 : parseFloat(e.target.value))}
+                    inputProps={{ step: 0.1, min: 0 }}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                  <TextField
+                    label="Actual Capacity (KW)"
+                    type="number"
+                    value={actualSystemSize}
+                    onChange={(e) => {
+                      setActualSystemSize(e.target.value === "" ? 0 : parseFloat(e.target.value));
+                      setActualSizeEdited(true);
+                    }}
+                    inputProps={{ step: 0.01, min: 0 }}
+                    size="small"
+                    sx={{
+                      flex: 1,
+                      "& input": {
+                        fontWeight: "bold",
+                        color: actualSizeEdited ? "#b45309" : "#1e3a5f",
+                      }
+                    }}
+                    InputProps={{
+                      endAdornment: actualSizeEdited ? (
+                        <InputAdornment position="end">
+                          <Tooltip title={`Reset to calculated (${calcSystemKw} KW)`}>
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                setActualSizeEdited(false);
+                                setActualSystemSize(calcSystemKw);
+                              }}
+                              sx={{ p: 0.25, color: "#d97706" }}
+                            >
+                              <RestartAlt fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </InputAdornment>
+                      ) : undefined,
+                    }}
+                    helperText={actualSizeEdited ? `Manual Override (Calculated: ${calcSystemKw} KW)` : undefined}
+                  />
                 </Box>
-                <Box sx={{ display: "flex", gap: 1 }}>
-                  <TextField label="Panels" value={numberOfPanels} InputProps={{ readOnly: true }} size="small" sx={{ flex: 1, "& input": { fontWeight: "bold", color: "#1e3a5f" } }} />
-                  <TextField label="Actual (KW)" value={actualSystemSize} InputProps={{ readOnly: true }} size="small" sx={{ flex: 1, "& input": { fontWeight: "bold", color: "#1e3a5f" } }} />
+
+                {/* Solar PV Modules Configuration (Multi-type & Multi-wattage) */}
+                <Box sx={{ p: 1.25, bgcolor: "#f8fafc", borderRadius: 1.5, border: "1px solid #e2e8f0" }}>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+                    <Box>
+                      <Typography variant="caption" sx={{ fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                        PV Modules ({panelItems.length})
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: "block", color: "#64748b", fontSize: "10.5px" }}>
+                        Total: {totalPanelsCount} Panels | {totalCalculatedWattageWp} Wp ({calcSystemKw} KW)
+                        {totalPanelsCost > 0 && ` | Modules: ₹${formatCurrency(totalPanelsCost)}`}
+                      </Typography>
+                    </Box>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<Add />}
+                      onClick={addPanelItem}
+                      sx={{ textTransform: "none", fontSize: "11px", py: 0.25, px: 1, borderColor: "#cbd5e1" }}
+                    >
+                      Add Panel
+                    </Button>
+                  </Box>
+
+                  {panelItems.map((item, idx) => (
+                    <Box
+                      key={item.id}
+                      sx={{
+                        p: 1.25,
+                        mb: idx < panelItems.length - 1 ? 1 : 0,
+                        bgcolor: "#ffffff",
+                        borderRadius: 1.5,
+                        border: "1px solid #e2e8f0",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+                      }}
+                    >
+                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 0.8 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: "#475569" }}>
+                          Panel Type #{idx + 1}
+                        </Typography>
+                        {panelItems.length > 1 && (
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => removePanelItem(item.id)}
+                            sx={{ p: 0.25 }}
+                          >
+                            <Delete sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        )}
+                      </Box>
+
+                      <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, mb: 1 }}>
+                        <FormControl size="small" fullWidth>
+                          <InputLabel>Brand</InputLabel>
+                          <Select
+                            value={item.brand}
+                            label="Brand"
+                            onChange={(e) => updatePanelItem(item.id, "brand", e.target.value)}
+                          >
+                            {panelBrands.map((b) => (
+                              <MenuItem key={b} value={b}>{b}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+
+                        <FormControl size="small" fullWidth>
+                          <InputLabel>Type</InputLabel>
+                          <Select
+                            value={item.panelType}
+                            label="Type"
+                            onChange={(e) => updatePanelItem(item.id, "panelType", e.target.value)}
+                          >
+                            {panelTypes.map((t) => (
+                              <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Box>
+
+                      {item.brand === "Other" && (
+                        <TextField
+                          fullWidth
+                          label="Custom Brand Name"
+                          value={item.customBrand || ""}
+                          onChange={(e) => updatePanelItem(item.id, "customBrand", e.target.value)}
+                          size="small"
+                          sx={{ mb: 1 }}
+                        />
+                      )}
+
+                      <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
+                        <TextField
+                          label="Wattage (Wp)"
+                          type="number"
+                          value={item.wattage || ""}
+                          onChange={(e) => updatePanelItem(item.id, "wattage", e.target.value === "" ? 0 : parseInt(e.target.value))}
+                          inputProps={{ step: 5, min: 0 }}
+                          size="small"
+                        />
+                        <TextField
+                          label="Quantity (Nos)"
+                          type="number"
+                          value={item.quantity || ""}
+                          onChange={(e) => updatePanelItem(item.id, "quantity", e.target.value === "" ? 0 : parseInt(e.target.value))}
+                          inputProps={{ min: 1 }}
+                          size="small"
+                        />
+                      </Box>
+
+                      <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, mt: 1 }}>
+                        <TextField
+                          label="Rate (₹/Wp)"
+                          type="number"
+                          value={item.ratePerWatt || ""}
+                          onChange={(e) => updatePanelItem(item.id, "ratePerWatt", e.target.value)}
+                          inputProps={{ step: 0.5, min: 0 }}
+                          InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+                          size="small"
+                        />
+                        <TextField
+                          label="Rate / Panel (₹)"
+                          type="number"
+                          value={item.ratePerPanel || ""}
+                          onChange={(e) => updatePanelItem(item.id, "ratePerPanel", e.target.value)}
+                          inputProps={{ step: 100, min: 0 }}
+                          InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+                          size="small"
+                        />
+                      </Box>
+
+                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 0.8, pt: 0.5, borderTop: "1px dashed #e2e8f0" }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: "10.5px" }}>
+                          {((Number(item.wattage) || 0) * (Number(item.quantity) || 0))} Wp ({(((Number(item.wattage) || 0) * (Number(item.quantity) || 0)) / 1000).toFixed(2)} KW)
+                        </Typography>
+                        {(item.ratePerPanel || item.ratePerWatt) ? (
+                          <Chip
+                            size="small"
+                            label={`₹ ${formatCurrency((Number(item.quantity) || 0) * (item.ratePerPanel || ((item.wattage || 0) * (item.ratePerWatt || 0))))}`}
+                            sx={{ height: 20, fontSize: "10px", fontWeight: 700, bgcolor: "#f0fdf4", color: "#166534", border: "1px solid #bbf7d0" }}
+                          />
+                        ) : (
+                          <Chip
+                            size="small"
+                            label={`${(((Number(item.wattage) || 0) * (Number(item.quantity) || 0)) / 1000).toFixed(2)} KW`}
+                            sx={{ height: 20, fontSize: "10px", fontWeight: 700, bgcolor: "#e0f2fe", color: "#0369a1" }}
+                          />
+                        )}
+                      </Box>
+                    </Box>
+                  ))}
                 </Box>
-                <Box sx={{ display: "flex", gap: 1 }}>
-                  <FormControl size="small" sx={{ flex: 1 }}>
-                    <InputLabel>Brand</InputLabel>
-                    <Select value={panelBrand} label="Brand" onChange={(e) => setPanelBrand(e.target.value)}>
-                      {panelBrands.map((b) => <MenuItem key={b} value={b}>{b}</MenuItem>)}
-                    </Select>
-                  </FormControl>
-                  <FormControl size="small" sx={{ flex: 1 }}>
-                    <InputLabel>Type</InputLabel>
-                    <Select value={panelType} label="Type" onChange={(e) => setPanelType(e.target.value)}>
-                      {panelTypes.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
-                    </Select>
-                  </FormControl>
-                </Box>
-                {panelBrand === "Other" && <TextField fullWidth label="Custom Brand" value={customPanelBrand} onChange={(e) => setCustomPanelBrand(e.target.value)} size="small" />}
+
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={showRatePerWatt}
+                      onChange={(e) => setShowRatePerWatt(e.target.checked)}
+                      sx={{ p: 0.5, color: "#1e3a5f", "&.Mui-checked": { color: "#1e3a5f" } }}
+                    />
+                  }
+                  label={
+                    <Typography variant="caption" sx={{ fontSize: "11.5px", fontWeight: 600, color: showRatePerWatt ? "#1e3a5f" : "#94a3b8" }}>
+                      Show Rate / Watt (₹/Wp) on Quotation
+                    </Typography>
+                  }
+                  sx={{ mt: 0.25, mb: 0.75, ml: 0 }}
+                />
+
                 <Box sx={{ display: "flex", gap: 1 }}>
                   <FormControl size="small" sx={{ flex: 1 }}>
                     <InputLabel>Inverter</InputLabel>
@@ -1724,16 +2338,53 @@ function QuotationBuilder() {
 
                   <FormControl size="small" sx={{ flex: 1 }}>
                     <InputLabel>Inverter Warranty</InputLabel>
-                    <Select value={inverterWarranty} label="Inverter Warranty" onChange={(e) => setInverterWarranty(e.target.value)}>
+                    <Select
+                      value={showInverterWarranty ? inverterWarranty : "None"}
+                      label="Inverter Warranty"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "None") {
+                          setShowInverterWarranty(false);
+                          setInverterWarranty("None");
+                        } else {
+                          setShowInverterWarranty(true);
+                          setInverterWarranty(val);
+                        }
+                      }}
+                    >
                       <MenuItem value="5 Years">5 Years</MenuItem>
                       <MenuItem value="7 Years">7 Years</MenuItem>
                       <MenuItem value="8 Years">8 Years</MenuItem>
                       <MenuItem value="10 Years">10 Years</MenuItem>
+                      <MenuItem value="None" sx={{ color: "#dc2626", fontWeight: 700 }}>None (Don&apos;t Show)</MenuItem>
                       <MenuItem value="Other">Other</MenuItem>
                     </Select>
                   </FormControl>
-                  {inverterWarranty === "Other" && <TextField label="Custom Inverter Warranty" size="small" sx={{ flex: 1 }} onChange={(e) => setInverterWarranty(e.target.value)} />}
+                  {inverterWarranty === "Other" && showInverterWarranty && <TextField label="Custom Inverter Warranty" size="small" sx={{ flex: 1 }} onChange={(e) => setInverterWarranty(e.target.value)} />}
                 </Box>
+
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={showInverterWarranty && inverterWarranty !== "None"}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setShowInverterWarranty(checked);
+                        if (checked && inverterWarranty === "None") {
+                          setInverterWarranty("5 Years");
+                        }
+                      }}
+                      sx={{ p: 0.5, color: "#1e3a5f", "&.Mui-checked": { color: "#1e3a5f" } }}
+                    />
+                  }
+                  label={
+                    <Typography variant="caption" sx={{ fontSize: "11.5px", fontWeight: 600, color: (showInverterWarranty && inverterWarranty !== "None") ? "#1e3a5f" : "#94a3b8" }}>
+                      Show Inverter Warranty on Quotation
+                    </Typography>
+                  }
+                  sx={{ m: 0 }}
+                />
 
                 {(selectedSystemType === "Hybrid" || selectedSystemType === "Off-grid") && (
                   <Box sx={{ display: "flex", gap: 1 }}>
@@ -1772,10 +2423,39 @@ function QuotationBuilder() {
             <Accordion defaultExpanded disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
               <AccordionSummary expandIcon={<ExpandMore />} sx={{ bgcolor: "#f8fafc", minHeight: 44, "& .MuiAccordionSummary-content": { my: 0.5 } }}>
                 <AttachMoney sx={{ mr: 1, color: "#1e3a5f", fontSize: 18 }} />
-                <Typography variant="subtitle2" fontWeight="bold" color="#1e3a5f">Pricing</Typography>
+                <Typography variant="subtitle2" fontWeight="bold" color="#1e3a5f">Pricing & Discount</Typography>
               </AccordionSummary>
               <AccordionDetails sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
                 <TextField fullWidth label="System Price (Incl. GST)" type="number" value={priceInput} onChange={(e) => setPriceInput(e.target.value === "" ? 0 : parseFloat(e.target.value))} InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }} size="small" />
+
+                {totalPanelsCost > 0 && (
+                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 1.25, py: 0.6, bgcolor: "#f1f5f9", borderRadius: 1.5, border: "1px solid #e2e8f0" }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: "11px" }}>
+                      Modules Value: <strong>₹ {formatCurrency(totalPanelsCost)}</strong>
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="text"
+                      onClick={() => setPriceInput(Math.round(totalPanelsCost * (1 + gstRate / 100)))}
+                      sx={{ textTransform: "none", fontSize: "10.5px", py: 0, px: 0.8, minWidth: 0, fontWeight: 700, color: "#1e40af" }}
+                    >
+                      Use as System Price (+GST)
+                    </Button>
+                  </Box>
+                )}
+
+                <TextField
+                  fullWidth
+                  label="Special Discount (₹)"
+                  type="number"
+                  value={discount || ""}
+                  onChange={(e) => setDiscount(e.target.value === "" ? 0 : Math.max(0, parseFloat(e.target.value) || 0))}
+                  InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+                  placeholder="0"
+                  size="small"
+                  helperText={discount > 0 ? `Subtracted: ₹${formatCurrency(calculations.totalAmount)} - ₹${formatCurrency(discount)} = Final Payable: ₹${formatCurrency(calculations.payableAmount)}` : undefined}
+                />
+
                 <Box sx={{ display: "flex", gap: 1 }}>
                   <TextField label="GST Rate" type="number" value={gstRate} onChange={(e) => setGstRate(e.target.value === "" ? 0 : parseFloat(e.target.value))} InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }} size="small" sx={{ flex: 1 }} />
                   <TextField label="GST Amount" value={`₹ ${formatCurrency(calculations.gstAmount)}`} InputProps={{ readOnly: true }} size="small" sx={{ flex: 1 }} />
@@ -1784,9 +2464,26 @@ function QuotationBuilder() {
                   <TextField label="Central Subsidy" type="number" value={centralSubsidy} onChange={(e) => setCentralSubsidy(e.target.value === "" ? 0 : parseFloat(e.target.value))} InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }} size="small" sx={{ flex: 1 }} />
                   <TextField label="State Subsidy" type="number" value={stateSubsidy} onChange={(e) => setStateSubsidy(e.target.value === "" ? 0 : parseFloat(e.target.value))} InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }} size="small" sx={{ flex: 1 }} />
                 </Box>
-                <Box sx={{ p: 1.5, bgcolor: "#dbeafe", borderRadius: 1, textAlign: "center" }}>
-                  <Typography variant="caption" sx={{ color: "#1e40af", textTransform: "uppercase", fontWeight: 700 }}>Effective Cost</Typography>
-                  <Typography variant="h5" fontWeight="900" color="#16a34a">₹ {formatCurrency(calculations.effectiveCost)}</Typography>
+
+                <Box sx={{ p: 1.5, bgcolor: "#dbeafe", borderRadius: 1.5, border: "1px solid #bfdbfe" }}>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary">Total (Incl. GST):</Typography>
+                    <Typography variant="caption" fontWeight="bold">₹ {formatCurrency(calculations.totalAmount)}</Typography>
+                  </Box>
+                  {discount > 0 && (
+                    <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5, color: "#b91c1c" }}>
+                      <Typography variant="caption" fontWeight="bold">- Special Discount:</Typography>
+                      <Typography variant="caption" fontWeight="bold">- ₹ {formatCurrency(discount)}</Typography>
+                    </Box>
+                  )}
+                  <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5, pt: 0.5, borderTop: "1px dashed #93c5fd" }}>
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: "#1e3a5f" }}>Final Payable:</Typography>
+                    <Typography variant="caption" sx={{ fontWeight: 900, color: "#1e3a5f" }}>₹ {formatCurrency(calculations.payableAmount)}</Typography>
+                  </Box>
+                  <Box sx={{ textAlign: "center", pt: 1, borderTop: "1px solid #bfdbfe", mt: 0.5 }}>
+                    <Typography variant="caption" sx={{ color: "#1e40af", textTransform: "uppercase", fontWeight: 800 }}>Effective Cost (After Subsidies)</Typography>
+                    <Typography variant="h5" fontWeight="900" color="#16a34a">₹ {formatCurrency(calculations.effectiveCost)}</Typography>
+                  </Box>
                 </Box>
               </AccordionDetails>
             </Accordion>
@@ -1795,8 +2492,8 @@ function QuotationBuilder() {
             <Accordion disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
               <AccordionSummary expandIcon={<ExpandMore />} sx={{ bgcolor: "#fef3c7", minHeight: 44, "& .MuiAccordionSummary-content": { my: 0.5 } }}>
                 <AddCircle sx={{ mr: 1, color: "#d97706", fontSize: 18 }} />
-                <Typography variant="subtitle2" fontWeight="bold" color="#92400e">
-                  Extra Costs {extraCosts.total > 0 && <Chip size="small" label={`₹${formatCurrency(extraCosts.total)}`} sx={{ ml: 1, height: 18, bgcolor: "#fbbf24", color: "#78350f", fontSize: "10px" }} />}
+                <Typography component="div" variant="subtitle2" fontWeight="bold" color="#92400e" sx={{ display: "inline-flex", alignItems: "center" }}>
+                  Extra Costs {extraCosts.total > 0 && <Chip component="span" size="small" label={`₹${formatCurrency(extraCosts.total)}`} sx={{ ml: 1, height: 18, bgcolor: "#fbbf24", color: "#78350f", fontSize: "10px" }} />}
                 </Typography>
               </AccordionSummary>
               <AccordionDetails sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
@@ -1866,17 +2563,95 @@ function QuotationBuilder() {
               <AccordionDetails sx={{ p: 1 }}>
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
                   {components.map((comp, index) => (
-                    <Box key={index} sx={{ display: "flex", alignItems: "center", gap: 1, p: 0.75, bgcolor: index % 2 === 0 ? "#f8fafc" : "white", borderRadius: 1, fontSize: 12 }}>
-                      <Box sx={{ flex: 1, overflow: "hidden" }}>
-                        <Typography variant="caption" fontWeight="bold" sx={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{comp.name}</Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{comp.quantity}</Typography>
+                    <Box key={index} sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, p: 0.85, bgcolor: index % 2 === 0 ? "#f8fafc" : "white", borderRadius: 1.5, border: "1px solid #f1f5f9" }}>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="caption" fontWeight="bold" sx={{ display: "block", fontSize: '11.5px', color: '#1e293b', wordBreak: "break-word" }}>{comp.name}</Typography>
+                        <Typography variant="caption" sx={{ display: "block", fontSize: '10.5px', color: '#64748b' }}>
+                          Qty: <strong>{comp.quantity}</strong> {comp.make ? `• Make: ${comp.make}` : ''}
+                        </Typography>
                       </Box>
-                      <IconButton size="small" onClick={() => handleEditComponent(index)}><Edit sx={{ fontSize: 16 }} /></IconButton>
-                      <IconButton size="small" color="error" onClick={() => handleDeleteComponent(index)}><Delete sx={{ fontSize: 16 }} /></IconButton>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexShrink: 0 }}>
+                        <IconButton size="small" onClick={() => handleEditComponent(index)} sx={{ p: 0.5 }}><Edit sx={{ fontSize: 16 }} /></IconButton>
+                        <IconButton size="small" color="error" onClick={() => handleDeleteComponent(index)} sx={{ p: 0.5 }}><Delete sx={{ fontSize: 16 }} /></IconButton>
+                      </Box>
                     </Box>
                   ))}
                 </Box>
                 <Button fullWidth variant="outlined" size="small" startIcon={<Add />} onClick={() => setAddComponentDialog(true)} sx={{ mt: 1 }}>Add Component</Button>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Terms & Conditions */}
+            <Accordion disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
+              <AccordionSummary expandIcon={<ExpandMore />} sx={{ bgcolor: "#f8fafc", minHeight: 44, "& .MuiAccordionSummary-content": { my: 0.5 } }}>
+                <Gavel sx={{ mr: 1, color: "#1e3a5f", fontSize: 18 }} />
+                <Typography variant="subtitle2" fontWeight="bold" color="#1e3a5f">
+                  Terms & Conditions ({terms.length})
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ p: 1 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                  Fine-tune terms for this quotation (default terms can be customized in Company Settings):
+                </Typography>
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+                  {terms.map((term, index) => (
+                    <Box key={index} sx={{ display: "flex", alignItems: "flex-start", gap: 0.5, p: 0.5, bgcolor: index % 2 === 0 ? "#f8fafc" : "white", borderRadius: 1 }}>
+                      {editRooftopTermIdx === index ? (
+                        <TextField
+                          fullWidth
+                          value={editRooftopTermText}
+                          onChange={(e) => setEditRooftopTermText(e.target.value)}
+                          size="small"
+                          multiline
+                          onBlur={() => {
+                            const updated = [...terms];
+                            updated[index] = editRooftopTermText;
+                            setTerms(updated);
+                            setEditRooftopTermIdx(-1);
+                          }}
+                          autoFocus
+                        />
+                      ) : (
+                        <Typography
+                          variant="caption"
+                          sx={{ flex: 1, cursor: "pointer", fontSize: "11px", color: "#334155" }}
+                          onClick={() => {
+                            setEditRooftopTermIdx(index);
+                            setEditRooftopTermText(term);
+                          }}
+                        >
+                          {index + 1}. {term.substring(0, 80)}{term.length > 80 ? "..." : ""}
+                        </Typography>
+                      )}
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          setEditRooftopTermIdx(index);
+                          setEditRooftopTermText(term);
+                        }}
+                      >
+                        <Edit sx={{ fontSize: 14 }} />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => setTerms(terms.filter((_, i) => i !== index))}
+                      >
+                        <Delete sx={{ fontSize: 14 }} />
+                      </IconButton>
+                    </Box>
+                  ))}
+                </Box>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  size="small"
+                  startIcon={<Add />}
+                  onClick={() => setTerms([...terms, "New quotation term"])}
+                  sx={{ mt: 1, textTransform: "none" }}
+                >
+                  Add Term
+                </Button>
               </AccordionDetails>
             </Accordion>
           </>)}
@@ -1912,7 +2687,7 @@ function QuotationBuilder() {
             {/* B2B Header */}
             <Box className="avoid-break" sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "3.5px solid #d97706", pb: 1, mb: 1 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1.75 }}>
-                <Box component="img" src={origin ? `${origin}${activeCompany.logo}` : activeCompany.logo} alt="Logo" sx={{ maxHeight: activeCompany.id === "krishnanuja" ? 92 : 68, maxWidth: activeCompany.id === "krishnanuja" ? 120 : 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                <Box component="img" src={resolveImageUrl(activeCompany.logo || activeCompany.logo_url, origin)} alt="Logo" sx={{ maxHeight: 68, maxWidth: 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
                 <Box>
                   <Typography sx={{ fontSize: activeCompany.name.length > 25 ? "15px" : "20px", fontWeight: 900, color: "#b45309", letterSpacing: "-0.5px", lineHeight: 1.1, textTransform: "uppercase" }}>{activeCompany.name}</Typography>
                   <Typography sx={{ fontSize: "9.5px", fontWeight: 600, color: "#64748b", mt: 0.25, letterSpacing: 0.8, textTransform: "uppercase" }}>{activeCompany.tagline}</Typography>
@@ -2098,16 +2873,16 @@ function QuotationBuilder() {
                 <Typography sx={{ fontSize: "10.5px", fontWeight: 900, color: "#b45309", mb: 0, textDecoration: "underline", textDecorationColor: "#d97706", textUnderlineOffset: 3 }}>
                   For {activeCompany.name}
                 </Typography>
-                <Box component="img" src={origin ? `${origin}${(activeCompany as any).signature || '/signature.png'}` : ((activeCompany as any).signature || '/signature.png')} alt="Signature" sx={{ width: 140, height: 50, objectFit: "contain", display: "block", ml: "auto", my: 0.2 }} onError={(e: any) => e.target.style.display = 'none'} />
+                {renderSealAndSign(activeCompany)}
                 <Box sx={{ width: 140, height: 1, bgcolor: "#cbd5e1", mb: 0.2, ml: "auto" }} />
-                <Typography sx={{ fontSize: "7.5px", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>Authorized Signatory</Typography>
+                <Typography sx={{ fontSize: "7.5px", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>{(activeCompany as any).authorizedSignatory || (activeCompany as any).authorized_signatory || "Authorized Signatory"}</Typography>
               </Box>
             </Box>
           </>) : isServiceMode ? (<>
             {/* Service Header */}
             <Box className="avoid-break" sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "4px solid #0d47a1", pb: 1.5, mb: 1.5 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                <Box component="img" src={origin ? `${origin}${activeCompany.logo}` : activeCompany.logo} alt="Logo" sx={{ maxHeight: activeCompany.id === "krishnanuja" ? 95 : 72, maxWidth: activeCompany.id === "krishnanuja" ? 125 : 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                <Box component="img" src={resolveImageUrl(activeCompany.logo || activeCompany.logo_url, origin)} alt="Logo" sx={{ maxHeight: 72, maxWidth: 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
                 <Box>
                   <Typography sx={{ fontSize: activeCompany.name.length > 25 ? "15px" : "22px", fontWeight: 900, color: "#0d47a1", letterSpacing: "-0.5px", lineHeight: 1.1, textTransform: "uppercase" }}>{activeCompany.name}</Typography>
                   <Typography sx={{ fontSize: "9.5px", fontWeight: 600, color: "#64748b", mt: 0.25, letterSpacing: 0.8, textTransform: "uppercase" }}>{activeCompany.tagline}</Typography>
@@ -2218,9 +2993,9 @@ function QuotationBuilder() {
               </Box>
               <Box sx={{ textAlign: "right" }}>
                 <Typography sx={{ fontSize: "12px", fontWeight: 900, color: "#0d47a1", mb: 0, textDecoration: "underline", textDecorationColor: "#0d47a1", textUnderlineOffset: 3 }}>For {activeCompany.name}</Typography>
-                <Box component="img" src={origin ? `${origin}${(activeCompany as any).signature || '/signature.png'}` : ((activeCompany as any).signature || '/signature.png')} alt="Signature" sx={{ width: 160, height: 70, objectFit: "contain", display: "block", ml: "auto", my: 0.5 }} onError={(e: any) => e.target.style.display = 'none'} />
+                {renderSealAndSign(activeCompany)}
                 <Box sx={{ width: 160, height: 1, bgcolor: "#cbd5e1", mb: 0.25, ml: "auto" }} />
-                <Typography sx={{ fontSize: "8px", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>Authorized Signatory</Typography>
+                <Typography sx={{ fontSize: "8px", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>{(activeCompany as any).authorizedSignatory || (activeCompany as any).authorized_signatory || "Authorized Signatory"}</Typography>
               </Box>
             </Box>
           </>) : (<>
@@ -2229,7 +3004,7 @@ function QuotationBuilder() {
             {/* Header */}
             <Box className="avoid-break" sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "3.5px solid #eab308", pb: 1, mb: 1 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1.75 }}>
-                <Box component="img" src={origin ? `${origin}${activeCompany.logo}` : activeCompany.logo} alt="Logo" sx={{ maxHeight: activeCompany.id === "krishnanuja" ? 92 : 68, maxWidth: activeCompany.id === "krishnanuja" ? 120 : 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                <Box component="img" src={resolveImageUrl(activeCompany.logo || activeCompany.logo_url, origin)} alt="Logo" sx={{ maxHeight: 68, maxWidth: 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
                 <Box>
                   <Typography sx={{ fontSize: activeCompany.name.length > 25 ? "15px" : "20px", fontWeight: 900, color: "#1e3a5f", letterSpacing: "-0.5px", lineHeight: 1.1, textTransform: "uppercase" }}>{activeCompany.name}</Typography>
                   <Typography sx={{ fontSize: "9.5px", fontWeight: 600, color: "#64748b", mt: 0.2, letterSpacing: 0.8, textTransform: "uppercase" }}>{activeCompany.tagline}</Typography>
@@ -2261,10 +3036,22 @@ function QuotationBuilder() {
                 <Typography sx={{ fontWeight: 800, color: "#1e3a5f", mb: 0.35, textTransform: "uppercase", fontSize: "8.5px", letterSpacing: 0.8, borderBottom: "1px solid #e2e8f0", pb: 0.2 }}>System Specifications</Typography>
                 <Box sx={{ fontSize: "9px" }}>
                   <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.15 }}><span>System Size:</span> <strong>{actualSystemSize} KW ({phase === 1 ? "Single Phase" : "Three Phase"})</strong></Box>
-                  <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.15, wordBreak: "break-word" }}><span>Modules:</span> <strong style={{ textAlign: "right", maxWidth: "65%" }}>{effectivePanelBrand} {panelWattage}Wp ({panelType})</strong></Box>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.15, wordBreak: "break-word" }}>
+                    <span>Modules:</span>
+                    <strong style={{ textAlign: "right", maxWidth: "68%" }}>
+                      {panelItems.length > 1
+                        ? panelItems.map((p) => {
+                            const rateInfo = showRatePerWatt ? (p.ratePerWatt ? ` @ ₹${p.ratePerWatt}/Wp` : (p.ratePerPanel ? ` @ ₹${p.ratePerPanel}/pc` : '')) : '';
+                            return `${p.brand === "Other" && p.customBrand ? p.customBrand : p.brand} ${p.wattage}Wp (${p.quantity} Nos${rateInfo})`;
+                          }).join(", ")
+                        : `${effectivePanelBrand} ${panelWattage}Wp (${panelType})${showRatePerWatt ? (panelItems[0]?.ratePerWatt ? ` @ ₹${panelItems[0].ratePerWatt}/Wp` : (panelItems[0]?.ratePerPanel ? ` @ ₹${panelItems[0].ratePerPanel}/pc` : '')) : ''}`}
+                    </strong>
+                  </Box>
                   <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.15, color: "#475569" }}><span>Module Warranty:</span> <strong>{panelWarranty}</strong></Box>
                   <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.15, wordBreak: "break-word" }}><span>Inverter:</span> <strong style={{ textAlign: "right", maxWidth: "65%" }}>{effectiveInverterBrand} {inverterModel}</strong></Box>
-                  <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.15, color: "#475569" }}><span>Inverter Warranty:</span> <strong>{inverterWarranty}</strong></Box>
+                  {showInverterWarranty && inverterWarranty !== "None" && (
+                    <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.15, color: "#475569" }}><span>Inverter Warranty:</span> <strong>{inverterWarranty}</strong></Box>
+                  )}
                   {(selectedSystemType === "Hybrid" || selectedSystemType === "Off-grid") && (
                     <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.15, color: "#475569" }}><span>Battery Warranty:</span> <strong>{effectiveBatteryWarranty}</strong></Box>
                   )}
@@ -2343,7 +3130,7 @@ function QuotationBuilder() {
                   {activeCompany.bank?.upiId && (
                     <Box sx={{ textAlign: "center", flexShrink: 0 }}>
                       <a href={`upi://pay?pa=${activeCompany.bank.upiId}&pn=${encodeURIComponent(activeCompany.name)}&am=${calculations.totalAmount}&cu=INR`} style={{ textDecoration: "none" }}>
-                        <Box component="img" src={origin ? `${origin}/payment.png` : "/payment.png"} alt="Payment QR" sx={{ width: 42, height: 42, objectFit: "contain", mixBlendMode: "multiply", display: "block" }} onError={(e: any) => e.target.style.display = 'none'} />
+                        <Box component="img" src={resolveImageUrl(activeCompany.qr_code_url || activeCompany.qrCodeUrl || (activeCompany as any).paymentQr, origin)} alt="Payment QR" sx={{ width: 42, height: 42, objectFit: "contain", mixBlendMode: "multiply", display: "block" }} onError={(e: any) => e.target.style.display = 'none'} />
                       </a>
                       <Typography sx={{ fontSize: "7px", color: "#64748b", mt: 0.1 }}>Scan UPI</Typography>
                     </Box>
@@ -2378,10 +3165,21 @@ function QuotationBuilder() {
                   <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "9.5px", py: 0.15, color: "#475569", borderBottom: "1px solid #e2e8f0", pb: 0.35, mb: 0.25 }}>
                     <span>GST (@ {gstRate}%):</span><span>₹ {formatCurrency(calculations.gstAmount)}</span>
                   </Box>
-                  <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: 900, color: "#1e3a5f", pt: 0.25 }}>
-                    <span style={{ fontSize: "9.5px", textTransform: "uppercase" }}>Total Amount:</span>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: 700, color: "#1e3a5f", pt: 0.2 }}>
+                    <span style={{ fontSize: "9px", textTransform: "uppercase" }}>Total Amount:</span>
                     <span style={{ color: "#1e40af" }}>₹ {formatCurrency(calculations.totalAmount)}</span>
                   </Box>
+                  {discount > 0 && (
+                    <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "9px", py: 0.15, color: "#b91c1c", fontWeight: 700 }}>
+                      <span>- Special Discount:</span><span>- ₹ {formatCurrency(discount)}</span>
+                    </Box>
+                  )}
+                  {discount > 0 && (
+                    <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "11.5px", fontWeight: 900, color: "#047857", pt: 0.2, borderTop: "1px dashed #cbd5e1" }}>
+                      <span style={{ fontSize: "9px", textTransform: "uppercase" }}>Final Payable:</span>
+                      <span>₹ {formatCurrency(calculations.payableAmount)}</span>
+                    </Box>
+                  )}
                 </Box>
 
                 {calculations.totalSubsidy > 0 ? (
@@ -2402,7 +3200,7 @@ function QuotationBuilder() {
                 ) : (
                   <Box sx={{ mt: 0.75, p: 0.6, bgcolor: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 1, textAlign: "center" }}>
                     <Typography sx={{ fontSize: "8px", color: "#1e40af", textTransform: "uppercase", fontWeight: 800 }}>Net Investment Payable</Typography>
-                    <Typography sx={{ fontSize: "13px", fontWeight: 900, color: "#1e40af" }}>₹ {formatCurrency(calculations.totalAmount)}</Typography>
+                    <Typography sx={{ fontSize: "13px", fontWeight: 900, color: "#1e40af" }}>₹ {formatCurrency(calculations.payableAmount)}</Typography>
                   </Box>
                 )}
               </Box>
@@ -2427,9 +3225,9 @@ function QuotationBuilder() {
               </Box>
               <Box sx={{ textAlign: "right", position: "relative" }}>
                 <Typography sx={{ fontSize: "10.5px", fontWeight: 900, color: "#1e3a5f", mb: 0, textDecoration: "underline", textDecorationColor: "#eab308", textUnderlineOffset: 3 }}>For {activeCompany.name}</Typography>
-                <Box component="img" src={origin ? `${origin}${(activeCompany as any).signature || '/signature.png'}` : ((activeCompany as any).signature || '/signature.png')} alt="Authorized Signatory" sx={{ width: 140, height: 50, objectFit: "contain", display: "block", ml: "auto", my: 0.2 }} onError={(e: any) => e.target.style.display = 'none'} />
+                {renderSealAndSign(activeCompany)}
                 <Box sx={{ width: 140, height: 1, bgcolor: "#cbd5e1", mb: 0.2, ml: "auto" }} />
-                <Typography sx={{ fontSize: "7.5px", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>Authorized Signatory</Typography>
+                <Typography sx={{ fontSize: "7.5px", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>{(activeCompany as any).authorizedSignatory || (activeCompany as any).authorized_signatory || "Authorized Signatory"}</Typography>
               </Box>
             </Box>
           </>)}
@@ -2539,6 +3337,108 @@ function QuotationBuilder() {
           <Button onClick={() => setAddB2BCustomDialog(false)}>Cancel</Button>
           <Button variant="contained" color="warning" onClick={handleAddCustomB2BItem}>
             Add Item
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* WhatsApp Direct Share Modal */}
+      <Dialog
+        open={whatsAppModal.open}
+        onClose={() => setWhatsAppModal({ ...whatsAppModal, open: false })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+          <Box sx={{ width: 38, height: 38, borderRadius: '50%', bgcolor: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 4px 12px rgba(37,211,102,0.35)' }}>
+            <WhatsApp sx={{ fontSize: 24 }} />
+          </Box>
+          <Box>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#1e293b' }}>
+              Quotation Ready for WhatsApp
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Direct chat prepared for +{formatWhatsAppPhoneNumber(whatsAppModal.phone)}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers sx={{ py: 2 }}>
+          {whatsAppModal.pdfUrl && (
+            <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }} icon={<Check fontSize="small" />}>
+              Official PDF uploaded to cloud storage! Document link included below.
+            </Alert>
+          )}
+
+          <Typography variant="caption" sx={{ fontWeight: 700, color: '#64748b', textTransform: 'uppercase', display: 'block', mb: 0.8 }}>
+            Message Preview (Pre-filled in WhatsApp)
+          </Typography>
+          <Box
+            sx={{
+              p: 1.5,
+              bgcolor: '#f8fafc',
+              borderRadius: 1.5,
+              border: '1px solid #e2e8f0',
+              fontFamily: 'monospace',
+              fontSize: '0.82rem',
+              whiteSpace: 'pre-wrap',
+              maxHeight: 220,
+              overflowY: 'auto',
+              color: '#1e293b',
+              lineHeight: 1.5,
+            }}
+          >
+            {whatsAppModal.message}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1, flexWrap: 'wrap' }}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={copiedWhatsApp ? <Check /> : <ContentCopy />}
+            onClick={() => {
+              navigator.clipboard.writeText(whatsAppModal.message);
+              setCopiedWhatsApp(true);
+              setTimeout(() => setCopiedWhatsApp(false), 2500);
+            }}
+            sx={{ textTransform: 'none', fontWeight: 600, color: '#475569', borderColor: '#cbd5e1' }}
+          >
+            {copiedWhatsApp ? "Copied to Clipboard!" : "Copy Message"}
+          </Button>
+
+          {whatsAppModal.pdfUrl && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Launch />}
+              onClick={() => window.open(whatsAppModal.pdfUrl!, '_blank')}
+              sx={{ textTransform: 'none', fontWeight: 600, color: '#1e3a5f', borderColor: '#cbd5e1' }}
+            >
+              View PDF
+            </Button>
+          )}
+
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<WhatsApp />}
+            onClick={() => openWhatsAppDirect(whatsAppModal.phone, whatsAppModal.message)}
+            sx={{
+              bgcolor: '#25D366',
+              '&:hover': { bgcolor: '#128C7E' },
+              fontWeight: 700,
+              textTransform: 'none',
+              ml: 'auto',
+              px: 2,
+            }}
+          >
+            Open WhatsApp
+          </Button>
+
+          <Button
+            size="small"
+            onClick={() => setWhatsAppModal({ ...whatsAppModal, open: false })}
+            sx={{ color: '#64748b' }}
+          >
+            Close
           </Button>
         </DialogActions>
       </Dialog>
