@@ -157,6 +157,7 @@ function QuotationBuilder() {
   const [selectedCompanyId, setSelectedCompanyId] = useState(companies[0].id);
   const [customCompany, setCustomCompany] = useState<any>(null);
   const [selectedBankAccountId, setSelectedBankAccountId] = useState<string>('');
+  const [companyLoaded, setCompanyLoaded] = useState(false);
 
   useEffect(() => {
     fetch('/api/company')
@@ -200,17 +201,18 @@ function QuotationBuilder() {
               ifsc: d.ifsc || '',
               upiId: d.upi_id || '',
             },
-            logo: d.logo_url || companies[0].logo,
-            signature: d.signature_url || companies[0].signature,
-            stamp: d.stamp_url || companies[0].stamp,
-            stamp_url: d.stamp_url || companies[0].stamp,
-            signature_url: d.signature_url || companies[0].signature,
-            logo_url: d.logo_url || companies[0].logo,
-            qr_code_url: d.qr_code_url || (companies[0] as any).paymentQr,
+            logo: d.logo_url || '',
+            signature: d.signature_url || '',
+            stamp: d.stamp_url || '',
+            stamp_url: d.stamp_url || '',
+            signature_url: d.signature_url || '',
+            logo_url: d.logo_url || '',
+            qr_code_url: d.qr_code_url || '',
             authorizedSignatory: d.authorized_signatory || 'Authorized Signatory',
             quotePrefix: d.quote_prefix || 'SLG',
             default_terms: d.default_terms || null,
           });
+          setCompanyLoaded(true);
 
           // Pre-populate default terms from company settings if available
           if (d.default_terms && !editingQuotationId) {
@@ -278,7 +280,9 @@ function QuotationBuilder() {
 
   // Helper to render Official Rubber Stamp Seal with Signature
   const renderSealAndSign = (company: any) => {
-    const seal = company.stamp_url || company.signature_url || company.stamp || company.signature || companies[0].signature;
+    if (!companyLoaded) return <Box sx={{ height: 48 }} />;
+    const seal = company.stamp_url || company.signature_url || company.stamp || company.signature || '';
+    if (!seal) return <Box sx={{ height: 48 }} />;
     const resolved = resolveImageUrl(seal, origin);
     if (!resolved) return <Box sx={{ height: 48 }} />;
 
@@ -2851,7 +2855,9 @@ function QuotationBuilder() {
             {/* B2B Header */}
             <Box className="avoid-break" sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "3.5px solid #d97706", pb: 1, mb: 1 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1.75 }}>
-                <Box component="img" src={resolveImageUrl(activeCompany.logo || activeCompany.logo_url, origin)} alt="Logo" sx={{ maxHeight: 68, maxWidth: 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                {companyLoaded && (activeCompany.logo_url || activeCompany.logo) ? (
+                  <Box component="img" src={resolveImageUrl(activeCompany.logo_url || activeCompany.logo, origin)} alt="Logo" sx={{ maxHeight: 68, maxWidth: 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                ) : null}
                 <Box>
                   <Typography sx={{ fontSize: activeCompany.name.length > 25 ? "15px" : "20px", fontWeight: 900, color: "#b45309", letterSpacing: "-0.5px", lineHeight: 1.1, textTransform: "uppercase" }}>{activeCompany.name}</Typography>
                   <Typography sx={{ fontSize: "9.5px", fontWeight: 600, color: "#64748b", mt: 0.25, letterSpacing: 0.8, textTransform: "uppercase" }}>{activeCompany.tagline}</Typography>
@@ -3054,7 +3060,9 @@ function QuotationBuilder() {
             {/* Service Header */}
             <Box className="avoid-break" sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "4px solid #0d47a1", pb: 1.5, mb: 1.5 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                <Box component="img" src={resolveImageUrl(activeCompany.logo || activeCompany.logo_url, origin)} alt="Logo" sx={{ maxHeight: 72, maxWidth: 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                {companyLoaded && (activeCompany.logo_url || activeCompany.logo) ? (
+                  <Box component="img" src={resolveImageUrl(activeCompany.logo_url || activeCompany.logo, origin)} alt="Logo" sx={{ maxHeight: 72, maxWidth: 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                ) : null}
                 <Box>
                   <Typography sx={{ fontSize: activeCompany.name.length > 25 ? "15px" : "22px", fontWeight: 900, color: "#0d47a1", letterSpacing: "-0.5px", lineHeight: 1.1, textTransform: "uppercase" }}>{activeCompany.name}</Typography>
                   <Typography sx={{ fontSize: "9.5px", fontWeight: 600, color: "#64748b", mt: 0.25, letterSpacing: 0.8, textTransform: "uppercase" }}>{activeCompany.tagline}</Typography>
@@ -3201,7 +3209,9 @@ function QuotationBuilder() {
             {/* Header */}
             <Box className="avoid-break" sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "3.5px solid #eab308", pb: 1, mb: 1 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1.75 }}>
-                <Box component="img" src={resolveImageUrl(activeCompany.logo || activeCompany.logo_url, origin)} alt="Logo" sx={{ maxHeight: 68, maxWidth: 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                {companyLoaded && (activeCompany.logo_url || activeCompany.logo) ? (
+                  <Box component="img" src={resolveImageUrl(activeCompany.logo_url || activeCompany.logo, origin)} alt="Logo" sx={{ maxHeight: 68, maxWidth: 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                ) : null}
                 <Box>
                   <Typography sx={{ fontSize: activeCompany.name.length > 25 ? "15px" : "20px", fontWeight: 900, color: "#1e3a5f", letterSpacing: "-0.5px", lineHeight: 1.1, textTransform: "uppercase" }}>{activeCompany.name}</Typography>
                   <Typography sx={{ fontSize: "9.5px", fontWeight: 600, color: "#64748b", mt: 0.2, letterSpacing: 0.8, textTransform: "uppercase" }}>{activeCompany.tagline}</Typography>

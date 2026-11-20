@@ -478,7 +478,7 @@ export const generateQuoteHtml = (data: any): string => {
         ${logoUrl ? `<img src="${logoUrl}" class="logo" alt="Logo" />` : ''}
         <div>
           <div class="company-name">${company.name.toUpperCase()}</div>
-          <div class="company-tagline">${company.tagline || 'ILLUMINATING YOUR FUTURE WITH CLEAN ENERGY'}</div>
+          <div class="company-tagline">${company.tagline || 'CLEAN ENERGY & SOLAR SOLUTIONS'}</div>
           <div class="company-info">
             <div><span class="gstin">GSTIN: ${company.gstin}</span>${company.cin ? ` | CIN: ${company.cin}` : ''}</div>
             <div><strong>HO:</strong> ${company.headOffice || company.head_office || ''}</div>

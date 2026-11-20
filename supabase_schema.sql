@@ -1,5 +1,5 @@
 -- ====================================================================
--- ARPIT SOLAR SHOP - PRODUCTION SUPABASE DATABASE SCHEMA
+-- STAR LINK GOODS PVT. LTD. - PRODUCTION SUPABASE DATABASE SCHEMA
 -- Single-Tenant Self-Hosted Solar Quotation System
 -- ====================================================================
 
@@ -104,21 +104,21 @@ CREATE TABLE IF NOT EXISTS structure_catalog (
 -- 7. Create Company Settings Table (Single-Tenant singleton id = 'default')
 CREATE TABLE IF NOT EXISTS company_settings (
   id TEXT PRIMARY KEY DEFAULT 'default',
-  name TEXT NOT NULL DEFAULT 'Arpit Solar Shop',
-  tagline TEXT DEFAULT 'ILLUMINATING YOUR FUTURE WITH CLEAN ENERGY',
-  quote_prefix TEXT DEFAULT 'ASS',
+  name TEXT NOT NULL DEFAULT 'Star Link Goods Pvt. Ltd.',
+  tagline TEXT DEFAULT 'CLEAN ENERGY & SOLAR SOLUTIONS',
+  quote_prefix TEXT DEFAULT 'SLG',
   gstin TEXT DEFAULT '09APKPM6299L1ZW',
   cin TEXT,
   phone TEXT DEFAULT '+91 9005770466',
   alternate_phone TEXT DEFAULT '9044555572',
-  email TEXT DEFAULT 'arpitsolarshop@gmail.com',
+  email TEXT DEFAULT 'contact@starlinkgoods.com',
   head_office TEXT DEFAULT 'Sh16/114/25-K-2, Sharvodaya Nagar, Kadipur Shivpur, Varanasi 221003',
   registered_office TEXT DEFAULT '1st Floor, Maurya Bhawan, Malgodam Road, Ballia 277001',
   warehouse TEXT,
-  authorized_signatory TEXT DEFAULT 'Ratnesh Mishra',
+  authorized_signatory TEXT DEFAULT 'Authorized Signatory',
   bank_name TEXT DEFAULT 'HDFC Bank',
   bank_branch TEXT DEFAULT 'Shivpur, Varanasi',
-  account_name TEXT DEFAULT 'ARPIT SOLAR SHOP',
+  account_name TEXT DEFAULT 'STAR LINK GOODS PVT. LTD.',
   account_number TEXT DEFAULT '50200123854806',
   ifsc TEXT DEFAULT 'HDFC0004807',
   upi_id TEXT DEFAULT 'vyapar.173575988777@hdfcbank',
@@ -240,12 +240,12 @@ INSERT INTO company_settings (
   bank_name, bank_branch, account_name, account_number, ifsc, upi_id
 )
 SELECT
-  'default', 'Arpit Solar Shop', 'ILLUMINATING YOUR FUTURE WITH CLEAN ENERGY', 'ASS', '09APKPM6299L1ZW',
-  '+91 9005770466', '9044555572', 'arpitsolarshop@gmail.com',
+  'default', 'Star Link Goods Pvt. Ltd.', 'CLEAN ENERGY & SOLAR SOLUTIONS', 'SLG', '09APKPM6299L1ZW',
+  '+91 9005770466', '9044555572', 'contact@starlinkgoods.com',
   'Sh16/114/25-K-2, Sharvodaya Nagar, Kadipur Shivpur, Varanasi 221003',
   '1st Floor, Maurya Bhawan, Malgodam Road, Ballia 277001',
-  'Ratnesh Mishra',
-  'HDFC Bank', 'Shivpur, Varanasi', 'ARPIT SOLAR SHOP', '50200123854806', 'HDFC0004807', 'vyapar.173575988777@hdfcbank'
+  'Authorized Signatory',
+  'HDFC Bank', 'Shivpur, Varanasi', 'STAR LINK GOODS PVT. LTD.', '50200123854806', 'HDFC0004807', 'vyapar.173575988777@hdfcbank'
 WHERE NOT EXISTS (SELECT 1 FROM company_settings WHERE id = 'default');
 
 -- Create Useful Indexes for High Performance Querying

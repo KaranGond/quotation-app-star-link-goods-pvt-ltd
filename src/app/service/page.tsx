@@ -47,12 +47,12 @@ export default function ServiceProposalBuilder() {
               ifsc: d.ifsc,
               upiId: d.upi_id,
             },
-            logo: d.logo_url || companies[0].logo,
-            signature: d.signature_url || companies[0].signature,
-            stamp: d.stamp_url || companies[0].stamp,
-            stamp_url: d.stamp_url || companies[0].stamp,
-            signature_url: d.signature_url || companies[0].signature,
-            logo_url: d.logo_url || companies[0].logo,
+            logo: d.logo_url || '',
+            signature: d.signature_url || '',
+            stamp: d.stamp_url || '',
+            stamp_url: d.stamp_url || '',
+            signature_url: d.signature_url || '',
+            logo_url: d.logo_url || '',
             authorizedSignatory: d.authorized_signatory || 'Authorized Signatory',
           });
         }
@@ -66,7 +66,7 @@ export default function ServiceProposalBuilder() {
   }, [customCompany, selectedCompanyId]);
 
   const renderSealAndSign = (c: any) => {
-    const seal = c.stamp_url || c.signature_url || c.stamp || c.signature || companies[0].signature;
+    const seal = c.stamp_url || c.signature_url || c.stamp || c.signature || '';
     const resolved = resolveImageUrl(seal, origin);
     if (!resolved) return <Box sx={{ height: 48 }} />;
 
@@ -366,7 +366,9 @@ export default function ServiceProposalBuilder() {
           {/* Header */}
           <Box className="avoid-break" sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "4px solid #0d47a1", pb: 1.5, mb: 1.5 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Box component="img" src={resolveImageUrl(company.logo || company.logo_url, origin)} alt="Logo" sx={{ maxHeight: 72, maxWidth: 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+              {(company.logo_url || company.logo) ? (
+                <Box component="img" src={resolveImageUrl(company.logo_url || company.logo, origin)} alt="Logo" sx={{ maxHeight: 72, maxWidth: 180, objectFit: "contain" }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+              ) : null}
               <Box>
                 <Typography sx={{ fontSize: company.name.length > 25 ? "15px" : "22px", fontWeight: 900, color: "#0d47a1", letterSpacing: "-0.5px", lineHeight: 1.1, textTransform: "uppercase" }}>{company.name}</Typography>
                 <Typography sx={{ fontSize: "9.5px", fontWeight: 600, color: "#64748b", mt: 0.25, letterSpacing: 0.8, textTransform: "uppercase" }}>{company.tagline}</Typography>

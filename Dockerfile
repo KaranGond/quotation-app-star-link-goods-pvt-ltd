@@ -1,5 +1,5 @@
 # ====================================================================
-# ARPIT SOLAR SHOP - PRODUCTION DOCKERFILE
+# STAR LINK GOODS PVT. LTD. - PRODUCTION DOCKERFILE
 # Multi-stage optimized standalone build with Chromium support
 # ====================================================================
 

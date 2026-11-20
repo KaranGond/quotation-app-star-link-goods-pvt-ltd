@@ -5,7 +5,7 @@ export const EXTRA_HEIGHT_RATE = 1500; // ₹ per kWp
 
 export const companyDetails = {
     name: "Star Link Goods",
-    logo: "/logo.png",
+    logo: "",
     address: "Sh16/114-25-K-2, Sharvodayanagar, Kadipur, Shivpur, Varanasi 221003 (UP)",
 };
 

@@ -694,7 +694,7 @@ export default function CompanySettingsPage() {
                     label="Authorized Signatory Name"
                     value={signatory}
                     onChange={(e) => setSignatory(e.target.value)}
-                    placeholder="e.g. Ratnesh Mishra"
+                    placeholder="e.g. Authorized Signatory / Director"
                     size="small"
                   />
                 </Grid>

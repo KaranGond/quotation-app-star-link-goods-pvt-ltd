@@ -23,10 +23,10 @@ export const companies = [
             upiId: "vyapar.173575988777@hdfcbank",
         },
         // Brand Assets synced with Supabase Storage
-        logo: "https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-logo.png",
-        signature: "https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-signature.png",
-        stamp: "https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-signature.png",
-        paymentQr: "https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-payment-qr.png",
+        logo: "",
+        signature: "",
+        stamp: "",
+        paymentQr: "",
         // Authorized Signatory
         authorizedSignatory: "Authorized Signatory",
     }

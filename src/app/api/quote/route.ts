@@ -114,14 +114,10 @@ export async function POST(request: Request) {
     }
 
     // Resolve brand assets into base64 for reliable Puppeteer rendering
-    const defaultSupabaseLogo = 'https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-logo.png';
-    const defaultSupabaseSig = 'https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-signature.png';
-    const defaultSupabaseQr = 'https://eugejgacxgxwfiwxzqck.supabase.co/storage/v1/object/public/company-assets/assets/default-payment-qr.png';
-
-    const rawLogo = company?.logo_url || company?.logo || defaultSupabaseLogo;
-    const rawSig = company?.signature_url || company?.signature || defaultSupabaseSig;
-    const rawStamp = company?.stamp_url || company?.stamp || defaultSupabaseSig;
-    const rawQr = company?.qr_code_url || defaultSupabaseQr;
+    const rawLogo = company?.logo_url || company?.logo || '';
+    const rawSig = company?.signature_url || company?.signature || '';
+    const rawStamp = company?.stamp_url || company?.stamp || rawSig || '';
+    const rawQr = company?.qr_code_url || '';
 
     const [logoUrl, signatureUrl, stampUrl, qrCodeUrl] = await Promise.all([
       resolveImageAsBase64(rawLogo),
